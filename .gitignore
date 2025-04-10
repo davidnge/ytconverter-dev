@@ -36,3 +36,5 @@ yarn-debug.log*
 
 # Ignore MP3 files
 /storage/downloads/*
+/app/assets/builds/*
+!/app/assets/builds/.keep

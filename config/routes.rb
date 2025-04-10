@@ -1,14 +1,33 @@
+require 'sidekiq/web'
+
 Rails.application.routes.draw do
+  get "static_pages/contact"
+  get "static_pages/copyright_claims"
+  get "static_pages/privacy_policy"
+  get "static_pages/terms_of_use"
   root 'conversions#index'
+
+  # Static pages
+  get 'contact', to: 'static_pages#contact'
+  get 'copyright-claims', to: 'static_pages#copyright_claims'
+  get 'privacy-policy', to: 'static_pages#privacy_policy'
+  get 'terms-of-use', to: 'static_pages#terms_of_use'
   
   resources :conversions, only: [:index, :create, :show] do
     member do
       get :download
-      get :status # Add this line
+      get :status
     end
   end
   
-  # For Sidekiq Web UI (optional, should be protected in production)
-  require 'sidekiq/web'
+  # Protect Sidekiq Web UI
+  if Rails.env.production?
+    Sidekiq::Web.use Rack::Auth::Basic do |username, password|
+      # Replace with actual environment variables in production
+      ActiveSupport::SecurityUtils.secure_compare(::Digest::SHA256.hexdigest(username), ::Digest::SHA256.hexdigest(ENV["SIDEKIQ_USERNAME"])) &
+      ActiveSupport::SecurityUtils.secure_compare(::Digest::SHA256.hexdigest(password), ::Digest::SHA256.hexdigest(ENV["SIDEKIQ_PASSWORD"]))
+    end
+  end
+  
   mount Sidekiq::Web => '/sidekiq'
 end

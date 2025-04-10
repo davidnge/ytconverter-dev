@@ -1,3 +1,6 @@
+
+require 'shellwords'
+
 class ConversionWorker
   include Sidekiq::Worker
   
@@ -13,13 +16,13 @@ class ConversionWorker
       video_id = conversion.youtube_id
       return handle_error(conversion, "Invalid YouTube URL") unless video_id
       
-      # Set the output path
+      # Set the output path - sanitize to avoid command injection
       output_path = Rails.root.join('storage', 'downloads', "#{video_id}.%(ext)s").to_s
       
       # Get video info using a direct call to yt-dlp
       begin
-        # Use yt-dlp to get video info
-        info_cmd = "yt-dlp -j #{conversion.url}"
+        # Use yt-dlp to get video info - properly escape the URL
+        info_cmd = "yt-dlp -j #{Shellwords.escape(conversion.url)}"
         video_info_json = `#{info_cmd}`
         
         unless $?.success?
@@ -27,6 +30,11 @@ class ConversionWorker
         end
         
         video_info = JSON.parse(video_info_json)
+        
+        # Validate video duration to prevent abuse
+        if video_info['duration'] && video_info['duration'] > 3600 # 1 hour limit
+          return handle_error(conversion, "Video is too long. Please choose a video under 1 hour.")
+        end
         
         conversion.update(
           title: video_info['title'],
@@ -41,7 +49,8 @@ class ConversionWorker
         quality_option = "-f bestaudio --extract-audio --audio-format mp3 --audio-quality #{conversion.quality}"
         output_option = "-o \"#{output_path}\""
         
-        download_cmd = "yt-dlp #{quality_option} #{output_option} #{conversion.url}"
+        # Properly shell-escape the URL for security
+        download_cmd = "yt-dlp #{quality_option} #{output_option} #{Shellwords.escape(conversion.url)}"
         system(download_cmd)
         
         unless $?.success?
@@ -52,6 +61,12 @@ class ConversionWorker
         mp3_path = Rails.root.join('storage', 'downloads', "#{video_id}.mp3").to_s
         
         if File.exist?(mp3_path)
+          # Check file size - limit to reasonable size (e.g., 100MB)
+          if File.size(mp3_path) > 100.megabytes
+            File.delete(mp3_path)
+            return handle_error(conversion, "Generated file is too large")
+          end
+          
           conversion.update(
             status: 'completed',
             file_path: mp3_path
@@ -74,5 +89,21 @@ class ConversionWorker
       status: 'failed',
       error_message: message
     )
+  end
+end
+
+
+# to remove old files
+class CleanupWorker
+  include Sidekiq::Worker
+  
+  def perform
+    # Delete files older than 24 hours
+    Conversion.old.each do |conversion|
+      conversion.cleanup_file
+    end
+    
+    # Log cleanup stats
+    Rails.logger.info("CleanupWorker completed: cleaned up old conversion files")
   end
 end

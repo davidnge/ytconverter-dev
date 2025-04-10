@@ -1,4 +1,51 @@
 <%# app/views/conversions/index.html.erb %>
+
+<% content_for :title, "YouTube to MP3 Converter - Free Online Audio Extractor" %>
+<% content_for :description, "Convert YouTube videos to high-quality MP3 files for free. Choose audio quality up to 320kbps, no registration required." %>
+
+<% content_for :additional_schema do %>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do I convert YouTube videos to MP3?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Simply paste the YouTube URL into the input field above, select your desired audio quality, and click 'Convert'. Once processing is complete, you can download your MP3 file."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What audio quality options are available?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "We offer three quality options: 128kbps (standard quality), 192kbps (high quality), and 320kbps (premium quality). Higher quality means better sound but larger file size."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is there a limit to how many videos I can convert?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "We implement fair usage limits to ensure our service remains available to everyone. Most users can convert several videos per day without issues."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is it legal to convert YouTube videos to MP3?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Converting YouTube videos for personal use is generally considered fair use in many jurisdictions. However, distributing copyrighted content without permission is illegal. Please use our service responsibly and respect copyright laws."
+        }
+      }
+    ]
+  }
+  </script>
+<% end %>
+
 <div class="max-w-2xl mx-auto">
   <div id="conversion-form-container">
     <%= render 'conversion_form' %>
@@ -8,8 +55,18 @@
     <%# Status will be loaded here dynamically %>
   </div>
 
-  <div class="bg-white shadow-md rounded-lg p-6 mt-8">
-    <h2 class="text-xl font-semibold text-gray-800 mb-4">How It Works</h2>
+  <!-- Divider -->
+  <div class="relative my-8 flex justify-center">
+    <div class="absolute inset-0 flex items-center justify-center">
+      <div class="w-20 border-t border-gray-300"></div>
+    </div>
+    <div class="relative">
+      <!-- You can add text here if you want, or leave it empty for just a line -->
+    </div>
+  </div>
+
+  <div id="how-it-works" class="bg-white shadow-md rounded-lg p-6 mt-8 mb-8">
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">How the Youtube to MP3 Converter Works</h2>
     <ol class="list-decimal list-inside space-y-2 text-gray-700">
       <li>Paste a valid YouTube URL in the field above</li>
       <li>Select your preferred audio quality</li>
@@ -17,6 +74,74 @@
       <li>Download your MP3 file when ready</li>
     </ol>
   </div>
+
+  <div id="features" class="bg-white shadow-md rounded-lg p-6 mb-8">
+    <h2 class="text-xl font-semibold text-gray-800 mb-8">Features</h2>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="flex flex-col items-center text-center">
+        <div class="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mb-3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <h3 class="font-medium text-gray-800">Fast Conversion</h3>
+        <p class="text-gray-600 mt-2">Convert Youtube videos to MP3 in under 30 seconds.</p>
+      </div>
+      
+      <div class="flex flex-col items-center text-center">
+        <div class="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mb-3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </div>
+        <h3 class="font-medium text-gray-800">High-Quality Audio</h3>
+        <p class="text-gray-600 mt-2">Choose audio quality up to 320kbps.</p>
+      </div>
+      
+      <div class="flex flex-col items-center text-center">
+        <div class="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mb-3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </div>
+        <h3 class="font-medium text-gray-800">100% Free</h3>
+        <p class="text-gray-600 mt-2">No registration or app install required.</p>
+      </div>
+    </div>
+  </div>
+  
+  <div id="faq" class="bg-white shadow-md rounded-lg p-6 mb-8">
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">FAQs</h2>
+    <div class="space-y-4">
+      <div>
+        <h3 class="font-semibold text-gray-800">How do I convert YouTube videos to MP3?</h3>
+        <p class="text-gray-600 mt-1 mb-6">Simply paste the YouTube URL into the input field above, select your desired audio quality, and click "Convert". Once processing is complete, click "Download" to save your MP3 file.</p>
+      </div>
+      
+      <div>
+        <h3 class="font-semibold text-gray-800">What audio quality options are available?</h3>
+        <p class="text-gray-600 mt-1 mb-6">We offer three quality options: 128kbps (standard quality), 192kbps (high quality), and 320kbps (highest quality). Higher quality means better sound but larger file size.</p>
+      </div>
+      
+      <div>
+        <h3 class="font-semibold text-gray-800">Is there a limit to how many videos I can convert?</h3>
+        <p class="text-gray-600 mt-1 mb-6">We implement fair usage limits to ensure our service remains available to everyone. Most users can convert several videos per day without issues.</p>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-gray-800">Is this safe?</h3>
+        <p class="text-gray-600 mt-1 mb-6">Yes 100%. We do not ask you to sign up or download any software prior the download, only clean MP3 files. </p>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-gray-800">Can I convert Youtube playlist videos?</h3>
+        <p class="text-gray-600 mt-1 mb-6">Yes. We specifically designed our converter to handle Youtube playlist videos. </p>
+      </div>
+
+    </div>
+  </div>
+
+
 </div>
 
 <script>
@@ -63,7 +188,8 @@
           body: formData,
           headers: {
             'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
           },
           credentials: 'same-origin'
         })

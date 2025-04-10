@@ -7,6 +7,13 @@ gem 'yt-dlp.rb', '~> 0.3.1'
 gem 'dotenv-rails'                # For environment variables
 
 
+gem 'rack-attack' # add rate limiting
+gem 'sidekiq-cron'
+
+
+gem 'sitemap_generator'
+
+
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "~> 8.0.2"
 # The modern asset pipeline for Rails [https://github.com/rails/propshaft]

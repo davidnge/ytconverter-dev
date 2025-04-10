@@ -1,9 +1,13 @@
+# app/models/conversion.rb
 class Conversion < ApplicationRecord
-  validates :url, presence: true
+  validates :url, presence: true, format: { 
+    with: %r{\A(https?://)?(www\.)?(youtube\.com|youtu\.be)/}, 
+    message: "must be a valid YouTube URL" 
+  }
   validates :quality, inclusion: { in: %w[128 192 320] }
   
-  # Add this line to ensure status is set
-  before_create :set_default_status
+  # Add a scope for finding old conversions
+  scope :old, ->(time = 24.hours.ago) { where("created_at < ?", time) }
   
   # Status options: pending, processing, completed, failed
   
@@ -24,12 +28,22 @@ class Conversion < ApplicationRecord
   end
   
   def filename
-    "#{title.parameterize[0..30]}-#{quality}kbps.mp3"
+    safe_title = title.present? ? title.parameterize[0..30] : youtube_id
+    "#{safe_title}-#{quality}kbps.mp3"
   end
   
-  private
-  
-  def set_default_status
-    self.status ||= 'pending'
+  # Add method to clean up file
+  def cleanup_file
+    if file_path.present? && File.exist?(file_path)
+      begin
+        File.delete(file_path)
+        update(file_path: nil)
+        return true
+      rescue => e
+        Rails.logger.error("Failed to delete file #{file_path}: #{e.message}")
+        return false
+      end
+    end
+    true
   end
 end

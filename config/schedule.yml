@@ -1,0 +1,4 @@
+# config/schedule.yml
+cleanup_old_files:
+  cron: '0 3 * * *'  # Run at 3 AM every day
+  class: 'CleanupWorker'
