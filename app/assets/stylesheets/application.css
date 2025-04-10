@@ -1,0 +1,43 @@
+/*
+ * This is a manifest file that'll be compiled into application.css.
+ *
+ * With Propshaft, assets are served efficiently without preprocessing steps. You can still include
+ * application-wide styles in this file, but keep in mind that CSS precedence will follow the standard
+ * cascading order, meaning styles declared later in the document or manifest will override earlier ones,
+ * depending on specificity.
+ *
+ * Consider organizing styles into separate files for maintainability.
+ */
+
+
+/* Add this to your CSS styles */
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+.processing-pulse {
+  animation: pulse 1.5s infinite;
+}
+
+.progress-bar {
+  transition: width 0.5s ease;
+  min-height: 10px; /* Make it taller and more visible */
+  background-color: #4f46e5; /* Indigo color */
+}
+
+/* Make the progress bar container more visible too */
+.progress-container {
+  background-color: #e5e7eb;
+  border-radius: 9999px;
+  height: 10px;
+  margin: 1rem 0;
+  overflow: hidden;
+}

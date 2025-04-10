@@ -1,0 +1,282 @@
+<%# app/views/conversions/index.html.erb %>
+<div class="max-w-2xl mx-auto">
+  <div id="conversion-form-container">
+    <%= render 'conversion_form' %>
+  </div>
+  
+  <div id="conversion-status-container" class="hidden">
+    <%# Status will be loaded here dynamically %>
+  </div>
+
+  <div class="bg-white shadow-md rounded-lg p-6 mt-8">
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">How It Works</h2>
+    <ol class="list-decimal list-inside space-y-2 text-gray-700">
+      <li>Paste a valid YouTube URL in the field above</li>
+      <li>Select your preferred audio quality</li>
+      <li>Click "Convert" and wait for processing</li>
+      <li>Download your MP3 file when ready</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+  // Keep track of the active conversion ID and any polling intervals
+  let activeConversionId = null;
+  let pollingInterval = null;
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('conversion-form');
+    
+    // Check for conversion_id in URL and handle it
+    const urlParams = new URLSearchParams(window.location.search);
+    const conversionId = urlParams.get('conversion_id');
+    
+    if (conversionId) {
+      // Remove the parameter from URL without reloading
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Load the conversion status if ID is in URL
+      fetchAndShowConversionStatus(conversionId);
+    }
+    
+    if (form) {
+      form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        
+        const formData = new FormData(form);
+        const youtubeUrl = formData.get('conversion[url]');
+        
+        // Validate YouTube URL before submitting
+        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
+        if (!youtubeRegex.test(youtubeUrl)) {
+          alert('Please enter a valid YouTube URL');
+          return; // Stop here and don't proceed with form submission
+        }
+        
+        // Show loading state
+        const submitButton = form.querySelector('input[type="submit"]');
+        submitButton.value = 'Converting...';
+        submitButton.disabled = true;
+        
+        fetch('/conversions', {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Success:', data);
+          if (data.errors) {
+            // Handle validation errors from the server
+            alert('Error: ' + data.errors.join(', '));
+            submitButton.value = 'Convert';
+            submitButton.disabled = false;
+            // Do NOT proceed to showing the conversion status form
+          } else {
+            // Save the active conversion ID
+            activeConversionId = data.id;
+            
+            // Fetch and show the conversion status
+            fetchAndShowConversionStatus(data.id);
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('An error occurred. Please try again.');
+          submitButton.value = 'Convert';
+          submitButton.disabled = false;
+          // Do NOT proceed to showing the conversion status form
+        });
+      });
+    }
+    
+    // Handle "Convert Another Video" links globally
+    document.addEventListener('click', function(event) {
+      const link = event.target.closest('a[href="/"]');
+      if (link) {
+        event.preventDefault();
+        
+        // Stop any active polling
+        clearPolling();
+        
+        // Reset to initial state
+        resetToInitialState();
+      }
+    });
+  });
+  
+  function fetchAndShowConversionStatus(conversionId) {
+    fetch(`/conversions/${conversionId}/status`)
+      .then(response => response.text())
+      .then(html => {
+        // Hide the form and show the status
+        document.getElementById('conversion-form-container').classList.add('hidden');
+        const statusContainer = document.getElementById('conversion-status-container');
+        statusContainer.innerHTML = html;
+        statusContainer.classList.remove('hidden');
+        
+        // Explicitly set initial width to 5% before starting animation
+        const progressBar = document.getElementById('progress-bar');
+        if (progressBar) {
+          progressBar.style.width = '5%';
+        }
+        
+        // Start the progress animation with a slight delay
+        setTimeout(() => {
+          startProgressAnimation();
+        }, 300);
+        
+        // Start polling for status updates
+        startPolling(conversionId);
+      })
+      .catch(error => {
+        console.error('Status fetch error:', error);
+        alert('Error loading conversion status. Please try again.');
+        resetToInitialState();
+      });
+  }
+  
+  function startProgressAnimation() {
+    const progressBar = document.getElementById('progress-bar');
+    if (!progressBar) return;
+    
+    // Clear any existing animation interval
+    if (window.progressAnimationInterval) {
+      clearInterval(window.progressAnimationInterval);
+    }
+    
+    // Start from a low percentage
+    progressBar.style.width = '5%';
+    
+    // Create a more natural animation that starts slow, accelerates, and then slows down
+    let width = 5; // Start at 5%
+    let step = 0.5; // Start with smaller steps
+    let targetWidth = 80; // Stop short of 100%
+    
+    // Store the interval ID so we can clear it later
+    window.progressAnimationInterval = setInterval(() => {
+      if (width >= targetWidth) {
+        clearInterval(window.progressAnimationInterval);
+      } else {
+        // Calculate dynamic increment: faster in the middle, slower at beginning and end
+        if (width < 20) {
+          // Slow start
+          step = 0.3;
+        } else if (width < 50) {
+          // Faster middle
+          step = 0.5;
+        } else {
+          // Slower approaching target
+          step = 0.2;
+        }
+        
+        width += step;
+        progressBar.style.width = width + '%';
+      }
+    }, 200);
+  }
+  
+  function startPolling(conversionId) {
+    // Clear any existing polling
+    clearPolling();
+    
+    // Start new polling
+    function checkStatus() {
+      console.log("Checking status for conversion:", conversionId);
+      
+      fetch(`/conversions/${conversionId}.json?_=${new Date().getTime()}`)
+        .then(response => response.json())
+        .then(data => {
+          console.log("Status received:", data.status);
+          
+          if (data.status === 'completed') {
+            console.log("Conversion complete - updating UI");
+            
+            // Stop the progress animation first
+            if (window.progressAnimationInterval) {
+              clearInterval(window.progressAnimationInterval);
+            }
+            
+            // Add a smooth transition to 100%
+            const progressBar = document.getElementById('progress-bar');
+            if (progressBar) {
+              progressBar.style.transition = 'width 0.8s ease-out';
+              progressBar.style.width = '100%';
+            }
+            
+            // Update status text
+            const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
+            if (statusText) statusText.textContent = "Completed";
+            
+            // Show download button
+            const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
+            if (downloadBtn) downloadBtn.classList.remove('hidden');
+            
+            // Show details panel
+            const detailsPanel = document.querySelector('[data-conversion-status-target="details"]');
+            if (detailsPanel) detailsPanel.classList.remove('hidden');
+            
+            // Update title and duration if available
+            if (data.title) {
+              const titleElement = document.querySelector('[data-conversion-status-target="title"]');
+              if (titleElement) titleElement.textContent = data.title;
+            }
+            
+            if (data.duration) {
+              const durationElement = document.querySelector('[data-conversion-status-target="duration"]');
+              if (durationElement) durationElement.textContent = data.duration;
+            }
+            
+            // Stop polling
+            clearPolling();
+          }
+        })
+        .catch(error => {
+          console.error("Error checking status:", error);
+        });
+    }
+    
+    // Check immediately and then every 3 seconds
+    checkStatus();
+    pollingInterval = setInterval(checkStatus, 3000);
+  }
+  
+  function clearPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+    
+    // Also clear any progress animation
+    if (window.progressAnimationInterval) {
+      clearInterval(window.progressAnimationInterval);
+      window.progressAnimationInterval = null;
+    }
+  }
+  
+  function resetToInitialState() {
+    // Hide status container and show form container
+    document.getElementById('conversion-status-container').classList.add('hidden');
+    document.getElementById('conversion-status-container').innerHTML = '';
+    document.getElementById('conversion-form-container').classList.remove('hidden');
+    
+    // Reset the form
+    const form = document.getElementById('conversion-form');
+    if (form) {
+      form.reset();
+      
+      const submitButton = form.querySelector('input[type="submit"]');
+      if (submitButton) {
+        submitButton.value = 'Convert';
+        submitButton.disabled = false;
+      }
+    }
+    
+    // Reset active conversion ID
+    activeConversionId = null;
+  }
+</script>
