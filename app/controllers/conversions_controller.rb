@@ -30,6 +30,10 @@ class ConversionsController < ApplicationController
   def status
     begin
       @conversion = Conversion.find(params[:id])
+      
+      # Force reload to ensure we have the latest data
+      @conversion.reload
+      
       render partial: 'conversion_status', locals: { conversion: @conversion }, layout: false
     rescue ActiveRecord::RecordNotFound => e
       Rails.logger.error("Status error: Conversion #{params[:id]} not found - #{e.message}")
@@ -76,16 +80,5 @@ class ConversionsController < ApplicationController
   
   def conversion_params
     params.require(:conversion).permit(:url, :quality)
-  end
-  
-  def conversion_status
-    {
-      id: @conversion.id,
-      status: @conversion.status || 'pending',
-      title: @conversion.title,
-      duration: @conversion.formatted_duration,
-      progress: @conversion.status == 'completed' ? 100 : (@conversion.status == 'processing' ? 60 : 20),
-      error_message: @conversion.error_message
-    }
   end
 end

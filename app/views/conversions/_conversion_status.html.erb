@@ -1,19 +1,16 @@
-<%# Update in app/views/conversions/_conversion_status.html.erb %>
+<%# app/views/conversions/_conversion_status.html.erb %>
 
 <div class="bg-white shadow-md rounded-lg p-6 mb-8 status-container" data-controller="conversion-status" data-conversion-status-id-value="<%= conversion.id %>">
   <h2 class="text-xl font-semibold text-gray-800 mb-4">Converting Your Video</h2>
   
-  <% if conversion.status == 'failed' %>
+  <%# FIX: Changed to status.to_s.downcase == 'failed' to ensure proper string comparison %>
+  <% if conversion.status.to_s.downcase == 'failed' %>
     <!-- Error status - show only error message, nothing else -->
     <div data-conversion-status-target="errorMessage">
       <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
         <p class="font-medium">Unable to convert this video</p>
-        <p class="mt-2"><span data-conversion-status-target="errorText"><%= conversion.error_message %></span></p>
+        <p class="mt-2"><span data-conversion-status-target="errorText"><%= conversion.error_message.presence || "An unknown error occurred. Please try a different video." %></span></p>
         <p class="mt-4">Please try again with a different video.</p>
-      </div>
-      
-      <div class="mt-4 flex justify-center">
-        <%= link_to "Try Another Video", root_path, class: "py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-md shadow-sm transition-colors" %>
       </div>
     </div>
   <% else %>
@@ -67,21 +64,35 @@
     <div data-conversion-status-target="downloadButton" class="<%= 'hidden' unless conversion.status == 'completed' %>">
       <%= link_to "Download MP3", download_conversion_path(conversion), class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" %>
     </div>
-    
-    <div class="mt-4 text-center">
-      <%= link_to "Convert Another Video", "/", class: "text-indigo-600 hover:text-indigo-800" %>
-    </div>
+  <% end %>
 
-    <% if conversion.status != 'completed' && conversion.status != 'failed' %>
-      <div id="manual-refresh" class="mt-6 hidden">
-        <p class="text-sm text-gray-600 mb-2">Is your download taking longer than expected?</p>
-        <button onclick="window.location.reload()" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-          Check Conversion Status
-        </button>
-      </div>
-    <% end %>
+  <!-- Always show this section regardless of status -->
+  <%# FIX: Removed the hidden class and ensure it's never hidden %>
+  <div class="mt-4 text-center">
+    <%= link_to "Convert Another Video", "/", class: "text-indigo-600 hover:text-indigo-800" %>
+  </div>
+
+  <% if conversion.status != 'completed' && conversion.status != 'failed' %>
+    <div id="manual-refresh" class="mt-6 hidden">
+      <p class="text-sm text-gray-600 mb-2">Is your download taking longer than expected?</p>
+      <button onclick="window.location.reload()" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+        Check Conversion Status
+      </button>
+    </div>
   <% end %>
 </div>
+
+<%# Add this for immediate status checking when "failed" %>
+<% if conversion.status.to_s.downcase == 'failed' %>
+<script>
+  // Ensure error message is visible
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log("Failed status detected, ensuring error message is visible");
+    const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
+    if (errorMsg) errorMsg.classList.remove('hidden');
+  });
+</script>
+<% end %>
 
 <script>
   // Show the manual refresh button after 60 seconds if conversion is still in progress

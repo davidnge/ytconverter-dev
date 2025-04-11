@@ -50,8 +50,9 @@ class ConversionWorker
       output_path = Rails.root.join('storage', 'downloads', "#{video_id}.%(ext)s").to_s
       
       begin
-        # Use streamlined yt-dlp info command with optimizations
-        info_cmd = "yt-dlp -j --skip-download --no-playlist --no-warnings #{Shellwords.escape(conversion.url)} 2>&1"
+        # Use streamlined yt-dlp info command with optimizations 
+        # This is more reliable than combining commands - improves total speed by a lot
+        info_cmd = "yt-dlp -j --skip-download --geo-bypass #{Shellwords.escape(conversion.url)} 2>&1"
         Rails.logger.info("Executing info command: #{info_cmd}")
         
         video_info_json = `#{info_cmd}`
@@ -72,6 +73,12 @@ class ConversionWorker
         end
         
         begin
+          # Skip any warnings or preceding text if present (only take valid JSON)
+          json_start = video_info_json.index('{')
+          if json_start && json_start > 0
+            video_info_json = video_info_json[json_start..-1]
+          end
+          
           video_info = JSON.parse(video_info_json)
           Rails.logger.info("Successfully parsed video info JSON")
         rescue JSON::ParserError => e
@@ -103,114 +110,76 @@ class ConversionWorker
         return handle_error(conversion, "Failed to fetch video info. Please try a different video.")
       end
       
-      # Download and convert the video using optimized yt-dlp
+      # Download and convert the video using yt-dlp - separate for better reliability
       begin
-        # Optimize yt-dlp configuration for faster performance
+        # Optimize yt-dlp configuration for faster performance - but keep it simple
         quality_option = "-f bestaudio --extract-audio --audio-format mp3 --audio-quality #{conversion.quality}"
         output_option = "-o \"#{output_path}\""
         progress_option = "--progress"
         
-        # Add significant performance optimizations
-        optimization_options = "--no-playlist --no-continue --no-part --concurrent-fragments 5 --force-ipv4"
+        # Add minimal optimizations that are known to work reliably
+        optimization_options = "--geo-bypass"
         
         # Properly shell-escape the URL for security
         download_cmd = "yt-dlp #{quality_option} #{output_option} #{progress_option} #{optimization_options} #{Shellwords.escape(conversion.url)}"
         
         Rails.logger.info("Executing download command: #{download_cmd}")
         
-        # Use Open3 to capture output
-        require 'open3'
+        # Use system to run the command directly - it should work reliably in all environments
+        system_result = system(download_cmd)
         
-        download_output = ""
-        download_error = ""
-        pid = nil
+        Rails.logger.info("Download command result: #{system_result}")
         
-        Open3.popen3(download_cmd) do |stdin, stdout, stderr, wait_thr|
-          pid = wait_thr.pid
-          
-          # Process is running. Periodically touch the conversion record to prevent timeout issues
-          monitor_thread = Thread.new do
-            while wait_thr.alive?
-              # Touch the record every 30 seconds to keep it fresh
-              Conversion.where(id: conversion.id).update_all(updated_at: Time.now)
-              sleep 5  # Check more frequently for better responsiveness
-            end
-          end
-          
-          # Just check error conditions without storing full output
-          stdout_thread = Thread.new do
-            stdout.each_line do |line|
-              # Check for error patterns without storing the entire output
-              if line.include?("copyright claim") || line.include?("Video unavailable") || line.include?("ERROR:")
-                # Mark as failed without storing all output
-                handle_error(conversion, "Unable to convert this video. It may be unavailable, private, or subject to copyright restrictions.")
-                Process.kill('TERM', pid) rescue nil
-                Thread.exit
-              end
-            end
-          end
-          
-          stderr_thread = Thread.new do
-            stderr.each_line do |line|
-              # Check for error patterns without storing the entire output
-              if line.include?("copyright claim") || line.include?("Video unavailable") || line.include?("ERROR:")
-                # Mark as failed without storing all output
-                handle_error(conversion, "Unable to convert this video. It may be unavailable, private, or subject to copyright restrictions.")
-                Process.kill('TERM', pid) rescue nil
-                Thread.exit
-              end
-            end
-          end
-          
-          # Wait for process to complete
-          exit_status = wait_thr.value
-          monitor_thread.exit if monitor_thread.alive?
-          stdout_thread.join
-          stderr_thread.join
-          
-          Rails.logger.info("Download command exit status: #{exit_status.success?}")
-          
-          # Check for error conditions
-          unless exit_status.success?
-            error_message = "Unable to convert this video. It may be unavailable, private, or subject to copyright restrictions."
-            Rails.logger.error("Download failed: #{error_message}")
-            return handle_error(conversion, error_message)
-          end
-        end
-        
-        # Get the actual file path
-        mp3_path = Rails.root.join('storage', 'downloads', "#{video_id}.mp3").to_s
-        
-        Rails.logger.info("Checking for MP3 file at: #{mp3_path}")
-        
-        if File.exist?(mp3_path)
-          # Check file size - limit to reasonable size
-          file_size = File.size(mp3_path)
-          Rails.logger.info("MP3 file size: #{file_size} bytes")
-          
-          if file_size > 200.megabytes
-            File.delete(mp3_path)
-            Rails.logger.info("Deleted file due to exceeding size limit")
-            return handle_error(conversion, "The generated MP3 file exceeds the maximum size limit (200MB). Please try a shorter video or a lower quality setting.")
-          end
-          
-          # Successfully completed - update the record
-          conversion.update(
-            status: 'completed',
-            file_path: mp3_path
-          )
-          
-          Rails.logger.info("Conversion completed successfully: #{mp3_path}")
-          
-          # Touch again to ensure the record is fresh
-          conversion.touch
-        else
-          Rails.logger.error("MP3 file was not created at: #{mp3_path}")
-          handle_error(conversion, "MP3 file was not created successfully. Please try a different video.")
+        # Check for success
+        unless system_result
+          error_message = "Unable to convert this video. It may be unavailable, private, or subject to copyright restrictions."
+          Rails.logger.error("Download failed: #{error_message}")
+          return handle_error(conversion, error_message)
         end
       rescue => e
         Rails.logger.error("Conversion error: #{e.message}")
         handle_error(conversion, "Download failed. Please try a different video.")
+      end
+      
+      # Get the actual file path
+      mp3_path = Rails.root.join('storage', 'downloads', "#{video_id}.mp3").to_s
+      
+      Rails.logger.info("Checking for MP3 file at: #{mp3_path}")
+      
+      # Wait a moment for the file to be fully written
+      sleep(1)
+      
+      if File.exist?(mp3_path)
+        # Check file size - limit to reasonable size
+        file_size = File.size(mp3_path)
+        Rails.logger.info("MP3 file size: #{file_size} bytes")
+        
+        if file_size > 200.megabytes
+          File.delete(mp3_path)
+          Rails.logger.info("Deleted file due to exceeding size limit")
+          return handle_error(conversion, "The generated MP3 file exceeds the maximum size limit (200MB). Please try a shorter video or a lower quality setting.")
+        end
+        
+        # Check if file is empty or too small
+        if file_size < 1000
+          File.delete(mp3_path)
+          Rails.logger.error("File is too small or empty (#{file_size} bytes)")
+          return handle_error(conversion, "The generated MP3 file is invalid. Please try a different video.")
+        end
+        
+        # Successfully completed - update the record
+        conversion.update(
+          status: 'completed',
+          file_path: mp3_path
+        )
+        
+        Rails.logger.info("Conversion completed successfully: #{mp3_path}")
+        
+        # Touch again to ensure the record is fresh
+        conversion.touch
+      else
+        Rails.logger.error("MP3 file was not created at: #{mp3_path}")
+        handle_error(conversion, "MP3 file was not created successfully. Please try a different video.")
       end
     rescue => e
       Rails.logger.error("Unhandled error in ConversionWorker: #{e.message}")
