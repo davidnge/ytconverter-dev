@@ -1,66 +1,14 @@
-<%# Fixed app/views/conversions/_conversion_status.html.erb %>
+<%# Update in app/views/conversions/_conversion_status.html.erb %>
+
 <div class="bg-white shadow-md rounded-lg p-6 mb-8 status-container" data-controller="conversion-status" data-conversion-status-id-value="<%= conversion.id %>">
   <h2 class="text-xl font-semibold text-gray-800 mb-4">Converting Your Video</h2>
   
-  <div class="mb-6">
-    <div class="text-sm font-medium text-gray-700 mb-1">Status:</div>
-    <div class="text-indigo-600 font-medium" data-conversion-status-target="statusText">
-      <%= conversion.status.present? ? conversion.status.capitalize : 'Pending' %>
-    </div>
-    
-    <div class="mt-3">
-      <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden progress-container <%= conversion.status == 'processing' ? 'processing' : '' %>">
-        <div id="progress-bar"
-             class="progress-bar bg-indigo-600 h-2.5 rounded-full"
-             style="width: <%= conversion.status == 'completed' ? '100%' : (conversion.status == 'processing' ? '40%' : '5%') %>;"
-             data-conversion-status-target="progressBar"></div>
-      </div>
-      <div class="text-xs text-gray-500 mt-1">
-        <%= conversion.status == 'completed' ? 'Conversion complete!' : 
-            (conversion.status == 'processing' ? 'Converting your audio...' : 'Starting conversion...') %>
-      </div>
-    </div>
-  </div>
-  
-  <div data-conversion-status-target="details" class="<%= 'hidden' unless conversion.title %>">
-    <div class="border rounded-md p-4 mb-4">
-      <div class="mb-2">
-        <div class="text-sm font-medium text-gray-700">Video Title:</div>
-        <div data-conversion-status-target="title"><%= conversion.title %></div>
-      </div>
-      
-      <div class="mb-2">
-        <div class="text-sm font-medium text-gray-700">Duration:</div>
-        <div data-conversion-status-target="duration"><%= conversion.formatted_duration %></div>
-      </div>
-      
-      <div>
-        <div class="text-sm font-medium text-gray-700">Quality:</div>
-        <div><%= conversion.quality %> kbps</div>
-
-        <% if conversion.duration && conversion.duration > 3600 && conversion.quality == "192" %>
-          <div class="mt-2 text-xs text-indigo-600 bg-indigo-50 p-2 rounded">
-            <strong>Note:</strong> Quality was automatically set to 192 kbps since this is a longer video (over 1 hour).
-            This helps maintain reasonable file sizes while preserving good audio quality.
-          </div>
-        <% end %>
-      </div>
-    </div>
-  </div>
-  
-  <div data-conversion-status-target="downloadButton" class="<%= 'hidden' unless conversion.status == 'completed' %>">
-    <%= link_to "Download MP3", download_conversion_path(conversion), class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" %>
-  </div>
-  
-  <div data-conversion-status-target="errorMessage" class="<%= 'hidden' unless conversion.status == 'failed' %>">
+  <% if conversion.status == 'failed' %>
+    <!-- Error status - show only error message, nothing else -->
+    <div data-conversion-status-target="errorMessage">
       <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
         <p class="font-medium">Unable to convert this video</p>
-        <p class="mt-2 whitespace-pre-wrap"><span data-conversion-status-target="errorText"><%= conversion.error_message %></span></p>
-        
-        <% if conversion.error_message&.include?("copyright claim") %>
-          <p class="mt-2 text-sm">This video has been claimed by a copyright holder and cannot be converted.</p>
-        <% end %>
-        
+        <p class="mt-2"><span data-conversion-status-target="errorText"><%= conversion.error_message %></span></p>
         <p class="mt-4">Please try again with a different video.</p>
       </div>
       
@@ -68,44 +16,90 @@
         <%= link_to "Try Another Video", root_path, class: "py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-md shadow-sm transition-colors" %>
       </div>
     </div>
+  <% else %>
+    <!-- Normal processing flow -->
+    <div class="mb-6">
+      <div class="text-sm font-medium text-gray-700 mb-1">Status:</div>
+      <div class="text-indigo-600 font-medium" data-conversion-status-target="statusText">
+        <%= conversion.status.present? ? conversion.status.capitalize : 'Pending' %>
+      </div>
+      
+      <div class="mt-3">
+        <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden progress-container <%= conversion.status == 'processing' ? 'processing' : '' %>">
+          <div id="progress-bar"
+               class="progress-bar bg-indigo-600 h-2.5 rounded-full"
+               style="width: <%= conversion.status == 'completed' ? '100%' : (conversion.status == 'processing' ? '40%' : '5%') %>;"
+               data-conversion-status-target="progressBar"></div>
+        </div>
+        <div class="text-xs text-gray-500 mt-1">
+          <%= conversion.status == 'completed' ? 'Conversion complete!' : 
+              (conversion.status == 'processing' ? 'Converting your audio...' : 'Starting conversion...') %>
+        </div>
+      </div>
+    </div>
+    
+    <div data-conversion-status-target="details" class="<%= 'hidden' unless conversion.title %>">
+      <div class="border rounded-md p-4 mb-4">
+        <div class="mb-2">
+          <div class="text-sm font-medium text-gray-700">Video Title:</div>
+          <div data-conversion-status-target="title"><%= conversion.title %></div>
+        </div>
+        
+        <div class="mb-2">
+          <div class="text-sm font-medium text-gray-700">Duration:</div>
+          <div data-conversion-status-target="duration"><%= conversion.formatted_duration %></div>
+        </div>
+        
+        <div>
+          <div class="text-sm font-medium text-gray-700">Quality:</div>
+          <div><%= conversion.quality %> kbps</div>
 
+          <% if conversion.duration && conversion.duration > 3600 && conversion.quality == "192" %>
+            <div class="mt-2 text-xs text-indigo-600 bg-indigo-50 p-2 rounded">
+              <strong>Note:</strong> Quality was automatically set to 192 kbps since this is a longer video (over 1 hour).
+              This helps maintain reasonable file sizes while preserving good audio quality.
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    
+    <div data-conversion-status-target="downloadButton" class="<%= 'hidden' unless conversion.status == 'completed' %>">
+      <%= link_to "Download MP3", download_conversion_path(conversion), class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" %>
+    </div>
+    
+    <div class="mt-4 text-center">
+      <%= link_to "Convert Another Video", "/", class: "text-indigo-600 hover:text-indigo-800" %>
+    </div>
 
-  <div class="mt-4 text-center <%= conversion.status == 'failed' ? 'hidden' : '' %>">
-    <%= link_to "Convert Another Video", "/", class: "text-indigo-600 hover:text-indigo-800" %>
-  </div>
-
-  <div id="manual-refresh" class="mt-6 hidden">
-    <p class="text-sm text-gray-600 mb-2">Is your download taking longer than expected?</p>
-    <button onclick="window.location.reload()" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-      Check Conversion Status
-    </button>
-  </div>
+    <% if conversion.status != 'completed' && conversion.status != 'failed' %>
+      <div id="manual-refresh" class="mt-6 hidden">
+        <p class="text-sm text-gray-600 mb-2">Is your download taking longer than expected?</p>
+        <button onclick="window.location.reload()" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          Check Conversion Status
+        </button>
+      </div>
+    <% end %>
+  <% end %>
 </div>
 
 <script>
+  // Show the manual refresh button after 60 seconds if conversion is still in progress
   document.addEventListener('DOMContentLoaded', function() {
-    // Check initial status - if failed, ensure error is shown
     const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
-    if (statusText && statusText.textContent.toLowerCase() === 'failed') {
-      const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
-      if (errorMsg) {
-        errorMsg.classList.remove('hidden');
-      }
-      
-      // Hide the regular "Convert Another Video" link
-      const regularLink = document.querySelector('.mt-4.text-center');
-      if (regularLink) {
-        regularLink.classList.add('hidden');
-      }
-    }
+    const conversionStatus = '<%= conversion.status %>';
     
-    // For pending/processing, show manual refresh after 60 seconds
-    if (statusText && (statusText.textContent.toLowerCase() === 'pending' || statusText.textContent.toLowerCase() === 'processing')) {
+    // Only show manual refresh for pending/processing statuses, not for errors or completed
+    if ((statusText && (statusText.textContent.toLowerCase() === 'pending' || 
+                        statusText.textContent.toLowerCase() === 'processing')) &&
+        conversionStatus !== 'failed' && conversionStatus !== 'completed') {
+      
       setTimeout(function() {
-        // Check current status again before showing refresh button
-        const currentStatus = document.querySelector('[data-conversion-status-target="statusText"]').textContent.toLowerCase();
+        const currentStatus = document.querySelector('[data-conversion-status-target="statusText"]')?.textContent.toLowerCase();
+        const manualRefresh = document.getElementById('manual-refresh');
+        
         if (currentStatus === 'pending' || currentStatus === 'processing') {
-          document.getElementById('manual-refresh').classList.remove('hidden');
+          if (manualRefresh) manualRefresh.classList.remove('hidden');
         }
       }, 60000); // 1 minute
     }
