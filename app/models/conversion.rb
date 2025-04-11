@@ -1,7 +1,7 @@
 # app/models/conversion.rb
 class Conversion < ApplicationRecord
   validates :url, presence: true, format: { 
-    with: %r{\A(https?://)?(www\.)?(youtube\.com|youtu\.be)/}, 
+    with: %r{\A(https?://)?(www\.)?(youtube\.com/((watch\?v=)|shorts/)|youtu\.be/)}, 
     message: "must be a valid YouTube URL" 
   }
   validates :quality, inclusion: { in: %w[128 192 320] }
@@ -12,9 +12,16 @@ class Conversion < ApplicationRecord
   # Status options: pending, processing, completed, failed
   
   def youtube_id
-    # Extract YouTube ID from URL
-    regex = %r{(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)/|.*[?&]v=)|youtu\.be/)([^"&?/\s]{11})}
-    match = regex.match(url)
+    # Extract YouTube ID from URL (including Shorts)
+    if url.include?('youtube.com/shorts/')
+      # Handle YouTube Shorts URL format
+      regex = %r{youtube\.com/shorts/([^"&?/\s]{11})}
+      match = regex.match(url)
+    else
+      # Handle regular YouTube URL format
+      regex = %r{(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)/|.*[?&]v=)|youtu\.be/)([^"&?/\s]{11})}
+      match = regex.match(url)
+    end
     match[1] if match
   end
   

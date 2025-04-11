@@ -28,14 +28,25 @@ class ConversionsController < ApplicationController
   end
 
   def status
-    @conversion = Conversion.find(params[:id])
-    render partial: 'conversion_status', locals: { conversion: @conversion }, layout: false
+    begin
+      @conversion = Conversion.find(params[:id])
+      render partial: 'conversion_status', locals: { conversion: @conversion }, layout: false
+    rescue ActiveRecord::RecordNotFound => e
+      Rails.logger.error("Status error: Conversion #{params[:id]} not found - #{e.message}")
+      render plain: "Conversion not found", status: 404
+    rescue StandardError => e
+      Rails.logger.error("Status error: #{e.message}\n#{e.backtrace.join("\n")}")
+      render plain: "Error loading status: #{e.message}", status: 500
+    end
   end
 
   def show
     @conversion = Conversion.find(params[:id])
-    # Force reload from the database to get the latest status
-    @conversion.reload if request.format.json?
+    # Always reload from the database to get the latest status
+    @conversion.reload
+    
+    # Log status for debugging
+    Rails.logger.info("Conversion #{@conversion.id} status: #{@conversion.status}, error: #{@conversion.error_message}")
     
     respond_to do |format|
       format.html
@@ -44,7 +55,9 @@ class ConversionsController < ApplicationController
         status: @conversion.status,
         title: @conversion.title,
         duration: @conversion.formatted_duration,
-        error_message: @conversion.error_message
+        error_message: @conversion.error_message,
+        # Add a timestamp to force cache invalidation
+        timestamp: Time.now.to_i
       }}
     end
   end

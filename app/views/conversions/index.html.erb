@@ -35,10 +35,26 @@
       },
       {
         "@type": "Question",
-        "name": "Is it legal to convert YouTube videos to MP3?",
+        "name": "Is this safe?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Converting YouTube videos for personal use is generally considered fair use in many jurisdictions. However, distributing copyrighted content without permission is illegal. Please use our service responsibly and respect copyright laws."
+          "text": "Yes 100%. We do not ask you to sign up or download any software prior the download, only clean MP3 files."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I convert Youtube playlist videos?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. We specifically designed our converter to handle Youtube playlist videos."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I convert YouTube videos or Shorts to MP3?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Simply paste the YouTube URL or YouTube Shorts URL into the input field above, select your desired audio quality, and click 'Convert'. Once processing is complete, you can download your MP3 file."
         }
       }
     ]
@@ -107,6 +123,17 @@
         <h3 class="font-medium text-gray-800">100% Free</h3>
         <p class="text-gray-600 mt-2">No registration or app install required.</p>
       </div>
+
+      <div class="flex flex-col items-center text-center mt-6">
+        <div class="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mb-3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+          </svg>
+        </div>
+        <h3 class="font-medium text-gray-800">Youtube Shorts Support</h3>
+        <p class="text-gray-600 mt-2">Download audio from YouTube Shorts.</p>
+      </div>
+
     </div>
   </div>
   
@@ -136,6 +163,17 @@
       <div>
         <h3 class="font-semibold text-gray-800">Can I convert Youtube playlist videos?</h3>
         <p class="text-gray-600 mt-1 mb-6">Yes. We specifically designed our converter to handle Youtube playlist videos. </p>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-gray-800">Can I convert YouTube Shorts to MP3?</h3>
+        <p class="text-gray-600 mt-1 mb-6">Yes. Our converter fully supports YouTube Shorts. Just paste the Shorts URL (example: https://youtube.com/shorts/ABCDEFGHIJK) into the input field and click "Convert".</p>
+      </div>
+
+
+      <div>
+        <h3 class="font-semibold text-gray-800">Are there video length limitations?</h3>
+        <p class="text-gray-600 mt-1 mb-6">Yes. We support videos up to 2 hours in length. For videos longer than 1 hour, we automatically adjust the quality to 192 kbps to maintain reasonable file sizes and audio quality</p>
       </div>
 
     </div>
@@ -171,10 +209,10 @@
         const formData = new FormData(form);
         const youtubeUrl = formData.get('conversion[url]');
         
-        // Validate YouTube URL before submitting
-        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
+        // Validate YouTube URL before submitting (including Shorts)
+        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/).+/;
         if (!youtubeRegex.test(youtubeUrl)) {
-          alert('Please enter a valid YouTube URL');
+          alert('Please enter a valid YouTube URL or YouTube Shorts URL');
           return; // Stop here and don't proceed with form submission
         }
         
@@ -201,13 +239,21 @@
             alert('Error: ' + data.errors.join(', '));
             submitButton.value = 'Convert';
             submitButton.disabled = false;
-            // Do NOT proceed to showing the conversion status form
           } else {
             // Save the active conversion ID
             activeConversionId = data.id;
             
             // Fetch and show the conversion status
             fetchAndShowConversionStatus(data.id);
+            
+            // Failsafe: If status doesn't load properly in 5 seconds, redirect to show page
+            setTimeout(function() {
+              const statusContainer = document.getElementById('conversion-status-container');
+              if (statusContainer && statusContainer.classList.contains('hidden')) {
+                console.log("Status container still hidden after timeout, redirecting to show page");
+                window.location.href = `/conversions/${data.id}`;
+              }
+            }, 5000);
           }
         })
         .catch(error => {
@@ -215,7 +261,6 @@
           alert('An error occurred. Please try again.');
           submitButton.value = 'Convert';
           submitButton.disabled = false;
-          // Do NOT proceed to showing the conversion status form
         });
       });
     }
@@ -236,8 +281,17 @@
   });
   
   function fetchAndShowConversionStatus(conversionId) {
-    fetch(`/conversions/${conversionId}/status`)
-      .then(response => response.text())
+    console.log(`Fetching status for conversion ${conversionId}`);
+    
+    fetch(`/conversions/${conversionId}/status`, {
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.text();
+      })
       .then(html => {
         // Hide the form and show the status
         document.getElementById('conversion-form-container').classList.add('hidden');
@@ -245,130 +299,388 @@
         statusContainer.innerHTML = html;
         statusContainer.classList.remove('hidden');
         
-        // Explicitly set initial width to 5% before starting animation
+        // Get initial status
+        const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
+        const initialStatus = statusText ? statusText.textContent.toLowerCase() : 'pending';
+        
+        // Initialize progress bar
         const progressBar = document.getElementById('progress-bar');
         if (progressBar) {
-          progressBar.style.width = '5%';
+          // Set initial width based on status
+          if (initialStatus === 'completed') {
+            progressBar.style.width = '100%';
+            currentProgressWidth = 100;
+          } else if (initialStatus === 'processing') {
+            progressBar.style.width = '40%';
+            currentProgressWidth = 40;
+            // Start continuous animation for processing
+            setTimeout(() => {
+              startProgressAnimation();
+            }, 300);
+          } else {
+            progressBar.style.width = '5%';
+            currentProgressWidth = 5;
+            // For pending, animate to 15% first, then continue with polling
+            setTimeout(() => {
+              updateProgressBar('pending');
+            }, 300);
+          }
         }
-        
-        // Start the progress animation with a slight delay
-        setTimeout(() => {
-          startProgressAnimation();
-        }, 300);
         
         // Start polling for status updates
         startPolling(conversionId);
+        
+        // Add backup mechanism for very long conversions
+        const maxWaitTime = 600000; // 10 minutes
+        setTimeout(() => {
+          checkFinalStatus(conversionId);
+        }, maxWaitTime);
       })
       .catch(error => {
         console.error('Status fetch error:', error);
-        alert('Error loading conversion status. Please try again.');
-        resetToInitialState();
+        
+        // Show error and redirect to the show page for the conversion
+        alert(`Error loading conversion status: ${error.message}. Redirecting to conversion page...`);
+        window.location.href = `/conversions/${conversionId}`;
       });
   }
   
+  // Global variable to track the current animation state
+  let currentProgressWidth = 0;
+  let progressAnimationActive = false;
+
   function startProgressAnimation() {
     const progressBar = document.getElementById('progress-bar');
     if (!progressBar) return;
     
     // Clear any existing animation interval
+    stopProgressAnimation();
+    
+    // Start from current position or 5% if not set
+    currentProgressWidth = parseInt(progressBar.style.width) || 5;
+    progressBar.style.width = `${currentProgressWidth}%`;
+    
+    // Flag that animation is active
+    progressAnimationActive = true;
+    
+    // Create a more balanced animation that better matches the conversion process
+    // Now slower at the start and faster at the end
+    window.progressAnimationInterval = setInterval(() => {
+      // Stop if we've reached near 100% or animation is no longer active
+      if (currentProgressWidth >= 95 || !progressAnimationActive) {
+        stopProgressAnimation();
+        return;
+      }
+      
+      // Calculate increment based on current progress
+      // Adjusted to be slower at start, moderate in middle, and faster toward end
+      let increment;
+      
+      if (currentProgressWidth < 20) {
+        // Slower start (0-20%)
+        increment = 0.2;
+      } else if (currentProgressWidth < 50) {
+        // Medium speed (20-50%)
+        increment = 0.25;
+      } else if (currentProgressWidth < 70) {
+        // Slightly faster (50-70%)
+        increment = 0.3;
+      } else {
+        // Fastest at the end (70-95%)
+        increment = 0.4;
+      }
+      
+      // Update the current width
+      currentProgressWidth += increment;
+      progressBar.style.width = `${currentProgressWidth}%`;
+    }, 200); // Update every 200ms for smooth animation
+  }
+
+  function stopProgressAnimation() {
+    progressAnimationActive = false;
     if (window.progressAnimationInterval) {
       clearInterval(window.progressAnimationInterval);
+      window.progressAnimationInterval = null;
+    }
+  }
+
+  function updateProgressBar(status, instant = false) {
+    const progressBar = document.getElementById('progress-bar');
+    if (!progressBar) return;
+
+    let targetWidth;
+    
+    switch(status) {
+      case 'pending':
+        targetWidth = 10;
+        break;
+      case 'processing':
+        // For processing, continue the animation instead of setting a fixed width
+        if (!progressAnimationActive) {
+          startProgressAnimation();
+        }
+        return;
+      case 'completed':
+        // For completed, jump to 100% immediately
+        stopProgressAnimation();
+        targetWidth = 100;
+        instant = true; // Always use instant transition for completion
+        break;
+      case 'failed':
+        // Stop animation and keep current width
+        stopProgressAnimation();
+        return;
+      default:
+        return;
     }
     
-    // Start from a low percentage
-    progressBar.style.width = '5%';
-    
-    // Create a more natural animation that starts slow, accelerates, and then slows down
-    let width = 5; // Start at 5%
-    let step = 0.5; // Start with smaller steps
-    let targetWidth = 80; // Stop short of 100%
-    
-    // Store the interval ID so we can clear it later
-    window.progressAnimationInterval = setInterval(() => {
-      if (width >= targetWidth) {
-        clearInterval(window.progressAnimationInterval);
-      } else {
-        // Calculate dynamic increment: faster in the middle, slower at beginning and end
-        if (width < 20) {
-          // Slow start
-          step = 0.3;
-        } else if (width < 50) {
-          // Faster middle
-          step = 0.5;
-        } else {
-          // Slower approaching target
-          step = 0.2;
-        }
-        
-        width += step;
-        progressBar.style.width = width + '%';
-      }
-    }, 200);
+    // Set the width with or without animation
+    if (instant) {
+      currentProgressWidth = targetWidth;
+      progressBar.style.width = `${targetWidth}%`;
+    } else {
+      // Simple transition to target
+      progressBar.style.width = `${targetWidth}%`;
+      currentProgressWidth = targetWidth;
+    }
   }
+
+
+    
   
   function startPolling(conversionId) {
     // Clear any existing polling
     clearPolling();
     
-    // Start new polling
-    function checkStatus() {
-      console.log("Checking status for conversion:", conversionId);
+    // Start with more frequent checks initially (every 1 second for the first 15 seconds)
+    // This helps catch copyright issues faster
+    let checkCount = 0;
+    const initialInterval = 1000; // 1 second
+    const regularInterval = 3000; // 3 seconds
+    let currentInterval = initialInterval;
+    
+    // Set up new polling
+    pollingInterval = setInterval(() => {
+      checkConversionStatus(conversionId);
       
-      fetch(`/conversions/${conversionId}.json?_=${new Date().getTime()}`)
-        .then(response => response.json())
-        .then(data => {
-          console.log("Status received:", data.status);
+      // After 15 checks (15 seconds), switch to slower polling
+      checkCount++;
+      if (checkCount === 15) {
+        clearInterval(pollingInterval);
+        pollingInterval = setInterval(() => {
+          checkConversionStatus(conversionId);
+        }, regularInterval);
+      }
+    }, initialInterval);
+    
+    // Add safety timeout to stop polling after 10 minutes
+    setTimeout(() => {
+      clearPolling();
+      console.log("Safety timeout reached, stopping polling");
+      
+      // Add a final check
+      checkConversionStatus(conversionId);
+    }, 600000); // 10 minutes
+  }
+  
+  function checkConversionStatus(conversionId) {
+    console.log(`Checking status for conversion: ${conversionId}`);
+    
+    // Add cache-busting and no-cache headers
+    fetch(`/conversions/${conversionId}.json?nocache=${new Date().getTime()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    })
+      .then(response => response.json())
+      .then(data => {
+        console.log("Status received:", data.status, "Error:", data.error_message);
+        
+        // Check for failed status immediately
+        if (data.status === 'failed') {
+          console.log("Conversion failed, updating UI immediately...");
           
-          if (data.status === 'completed') {
-            console.log("Conversion complete - updating UI");
-            
-            // Stop the progress animation first
-            if (window.progressAnimationInterval) {
-              clearInterval(window.progressAnimationInterval);
-            }
-            
-            // Add a smooth transition to 100%
-            const progressBar = document.getElementById('progress-bar');
-            if (progressBar) {
-              progressBar.style.transition = 'width 0.8s ease-out';
-              progressBar.style.width = '100%';
-            }
-            
-            // Update status text
-            const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
-            if (statusText) statusText.textContent = "Completed";
-            
-            // Show download button
-            const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
-            if (downloadBtn) downloadBtn.classList.remove('hidden');
-            
-            // Show details panel
-            const detailsPanel = document.querySelector('[data-conversion-status-target="details"]');
-            if (detailsPanel) detailsPanel.classList.remove('hidden');
-            
-            // Update title and duration if available
-            if (data.title) {
-              const titleElement = document.querySelector('[data-conversion-status-target="title"]');
-              if (titleElement) titleElement.textContent = data.title;
-            }
-            
-            if (data.duration) {
-              const durationElement = document.querySelector('[data-conversion-status-target="duration"]');
-              if (durationElement) durationElement.textContent = data.duration;
-            }
-            
-            // Stop polling
-            clearPolling();
+          // Stop animation and polling immediately
+          stopProgressAnimation();
+          clearPolling();
+          
+          // Update status text
+          const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
+          if (statusText) {
+            statusText.textContent = 'Failed';
           }
-        })
-        .catch(error => {
-          console.error("Error checking status:", error);
-        });
+          
+          // Show error message
+          const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
+          const errorText = document.querySelector('[data-conversion-status-target="errorText"]');
+          
+          if (errorMsg) {
+            errorMsg.classList.remove('hidden');
+          }
+          
+          if (errorText && data.error_message) {
+            errorText.textContent = data.error_message;
+          }
+          
+          // Hide the regular "Convert Another Video" link in favor of the error-specific one
+          const convertAnotherLink = document.querySelector('.mt-4.text-center');
+          if (convertAnotherLink) {
+            convertAnotherLink.classList.add('hidden');
+          }
+          
+          // Hide the manual refresh button if it's visible
+          const manualRefresh = document.getElementById('manual-refresh');
+          if (manualRefresh) {
+            manualRefresh.classList.add('hidden');
+          }
+          
+          return; // Stop further processing
+        }
+        
+        // For non-failed statuses, update normally
+        updateStatusUI(data);
+        
+        // If completed, stop polling
+        if (data.status === 'completed') {
+          clearPolling();
+        }
+      })
+      .catch(error => {
+        console.error("Error checking status:", error);
+        // Continue polling despite errors
+      });
+  }
+  
+  function updateStatusUI(data) {
+    // Update the status text
+    const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
+    if (statusText) {
+      statusText.textContent = capitalizeFirstLetter(data.status);
     }
     
-    // Check immediately and then every 3 seconds
-    checkStatus();
-    pollingInterval = setInterval(checkStatus, 3000);
+    // Update progress container class for processing state
+    const progressContainer = document.querySelector('.progress-container');
+    if (progressContainer) {
+      if (data.status === 'processing') {
+        progressContainer.classList.add('processing');
+      } else {
+        progressContainer.classList.remove('processing');
+      }
+    }
+    
+    // For completed status, immediately show 100% before showing download button
+    if (data.status === 'completed') {
+      // First update progress to 100%
+      updateProgressBar('completed');
+      
+      // Then show download button
+      const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
+      if (downloadBtn) {
+        downloadBtn.classList.remove('hidden');
+      }
+      
+      // Show details
+      const detailsPanel = document.querySelector('[data-conversion-status-target="details"]');
+      if (detailsPanel) {
+        detailsPanel.classList.remove('hidden');
+        
+        // Update title and duration
+        const titleElement = document.querySelector('[data-conversion-status-target="title"]');
+        if (titleElement && data.title) {
+          titleElement.textContent = data.title;
+        }
+        
+        const durationElement = document.querySelector('[data-conversion-status-target="duration"]');
+        if (durationElement && data.duration) {
+          durationElement.textContent = data.duration;
+        }
+      }
+    } else if (data.status === 'failed') {
+      // Stop progress animation immediately
+      stopProgressAnimation();
+      
+      // Show error message
+      const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
+      const errorText = document.querySelector('[data-conversion-status-target="errorText"]');
+      
+      if (errorMsg) {
+        errorMsg.classList.remove('hidden');
+        
+        // Add appropriate classes based on error type
+        if (data.error_message && data.error_message.includes('copyright claim')) {
+          errorMsg.querySelector('div').classList.add('border-yellow-500', 'bg-yellow-50', 'text-yellow-800');
+        }
+      }
+      
+      if (errorText && data.error_message) {
+        errorText.textContent = data.error_message;
+      }
+      
+      // Clear any pending status checks or refresh notices
+      clearPolling();
+      
+      // Remove any existing "check status" or "refresh" buttons
+      const existingButtons = document.querySelectorAll('.status-check-button, .refresh-notice');
+      existingButtons.forEach(button => button.remove());
+    } else {
+      // For pending or processing, update progress normally
+      updateProgressBar(data.status);
+    }
+  }
+  
+  function checkFinalStatus(conversionId) {
+    const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
+    if (statusText && statusText.textContent.toLowerCase() !== 'completed' && statusText.textContent.toLowerCase() !== 'failed') {
+      console.log("Performing backup status check after max wait time");
+      
+      fetch(`/conversions/${conversionId}.json?_=${new Date().getTime()}`, {
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        // Only show completion message if status is actually completed
+        if (data.status === 'completed') {
+          console.log("Backup check: Conversion is actually complete - updating UI");
+          
+          // Update UI to show completed
+          statusText.textContent = "Completed";
+          
+          // Update progress bar to 100% - force instant update
+          updateProgressBar('completed', true);
+          
+          // Show download button
+          const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
+          if (downloadBtn) downloadBtn.classList.remove('hidden');
+          
+          // Show user a helpful message
+          console.log("Adding auto-refresh notice");
+          const refreshNotice = document.createElement('div');
+          refreshNotice.className = 'mt-4 text-indigo-600 text-center refresh-notice';
+          refreshNotice.innerHTML = 'Processing complete! If the download button doesn\'t appear, please <a href="javascript:window.location.reload()" class="underline">refresh the page</a>.';
+          statusText.parentNode.appendChild(refreshNotice);
+        } 
+        // Handle failed status
+        else if (data.status === 'failed') {
+          // Just update the status text, the error message should already be shown
+          statusText.textContent = "Failed";
+          
+          // Make sure error message is visible
+          const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
+          if (errorMsg) errorMsg.classList.remove('hidden');
+        }
+      })
+      .catch(error => console.error("Error in backup check:", error));
+    }
+  }
+  
+  function capitalizeFirstLetter(string) {
+    if (!string) return '';
+    return string.charAt(0).toUpperCase() + string.slice(1);
   }
   
   function clearPolling() {

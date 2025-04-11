@@ -1,10 +1,12 @@
-<div class="max-w-2xl mx-auto" data-controller="conversion-status" data-conversion-status-id-value="<%= @conversion.id %>">
+<!-- Update in app/views/conversions/show.html.erb -->
+
+<div class="max-w-2xl mx-auto">
   <div class="bg-white shadow-md rounded-lg p-6 mb-4">
     <h2 class="text-xl font-semibold text-gray-800 mb-4">Converting Your Video</h2>
     
     <div class="mb-6">
       <div class="text-sm font-medium text-gray-700 mb-1">Status:</div>
-      <div class="text-indigo-600 font-medium" data-conversion-status-target="statusText">
+      <div class="text-indigo-600 font-medium" id="status-text">
         <%= @conversion.status.present? ? @conversion.status.capitalize : 'Pending' %>
       </div>
       
@@ -13,26 +15,33 @@
           <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
             <div id="progress-bar"
                  class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300 ease-out"
-                 style="width: <%= @conversion.status == 'pending' ? '5%' : '40%' %>;"
-                 data-conversion-status-target="progressBar"></div>
+                 style="width: <%= @conversion.status == 'pending' ? '5%' : '40%' %>;"></div>
           </div>
           <div class="text-xs text-gray-500 mt-1">
             <%= @conversion.status == 'pending' ? 'Starting conversion...' : 'Converting your audio...' %>
           </div>
         </div>
       <% end %>
+      
+      <% if @conversion.status == 'completed' %>
+        <div class="mt-3">
+          <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+            <div id="progress-bar" class="bg-indigo-600 h-2.5 rounded-full" style="width: 100%;"></div>
+          </div>
+        </div>
+      <% end %>
     </div>
     
-    <div data-conversion-status-target="details" class="<%= 'hidden' unless @conversion.title %>">
+    <div id="details-panel" class="<%= 'hidden' unless @conversion.title %>">
       <div class="border rounded-md p-4 mb-4">
         <div class="mb-2">
           <div class="text-sm font-medium text-gray-700">Video Title:</div>
-          <div data-conversion-status-target="title"><%= @conversion.title %></div>
+          <div id="title-text"><%= @conversion.title %></div>
         </div>
         
         <div class="mb-2">
           <div class="text-sm font-medium text-gray-700">Duration:</div>
-          <div data-conversion-status-target="duration"><%= @conversion.formatted_duration %></div>
+          <div id="duration-text"><%= @conversion.formatted_duration %></div>
         </div>
         
         <div>
@@ -42,13 +51,13 @@
       </div>
     </div>
     
-    <div data-conversion-status-target="downloadButton" class="<%= 'hidden' unless @conversion.status == 'completed' %>">
+    <div id="download-button" class="<%= 'hidden' unless @conversion.status == 'completed' %>">
       <%= link_to "Download MP3", download_conversion_path(@conversion), class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" %>
     </div>
     
-    <div data-conversion-status-target="errorMessage" class="<%= 'hidden' unless @conversion.status == 'failed' %>">
+    <div id="error-message" class="<%= 'hidden' unless @conversion.status == 'failed' %>">
       <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
-        <p><strong>Error:</strong> <span data-conversion-status-target="errorText"><%= @conversion.error_message %></span></p>
+        <p><strong>Error:</strong> <span id="error-text"><%= @conversion.error_message %></span></p>
         <p class="mt-2">Please try again with a different video.</p>
       </div>
     </div>
@@ -56,125 +65,86 @@
     <div class="mt-4 text-center">
       <%= link_to "Convert Another Video", root_path, class: "text-indigo-600 hover:text-indigo-800" %>
     </div>
+    
+    <% if @conversion.status == 'pending' || @conversion.status == 'processing' %>
+      <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+        <p class="text-sm text-gray-600">This page will automatically refresh to check for updates.</p>
+        <div class="mt-2">
+          <button onclick="window.location.reload()" class="py-2 px-4 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 transition-colors w-full">
+            Refresh Now
+          </button>
+        </div>
+      </div>
+    <% end %>
   </div>
 </div>
 
-<!-- Combined script for progress bar and fallback mechanisms -->
 <script>
+  // Simple auto-refresh for pending or processing statuses
   document.addEventListener('DOMContentLoaded', function() {
-    // Check if conversion is already complete and update UI accordingly
-    <% if @conversion.status == 'completed' %>
-      console.log("Conversion is already complete");
-      const downloadButton = document.querySelector('[data-conversion-status-target="downloadButton"]');
-      if (downloadButton) downloadButton.classList.remove('hidden');
-      const detailsPanel = document.querySelector('[data-conversion-status-target="details"]');
-      if (detailsPanel) detailsPanel.classList.remove('hidden');
-      const progressBar = document.getElementById('progress-bar');
-      if (progressBar) progressBar.style.width = '100%';
-    <% end %>
+    const status = '<%= @conversion.status %>';
     
-    // Animate progress bar for pending/processing states
-    <% if @conversion.status == 'pending' || @conversion.status == 'processing' %>
+    if (status === 'pending' || status === 'processing') {
+      // Animate progress bar
       const progressBar = document.getElementById('progress-bar');
       if (progressBar) {
-        let width = parseInt(progressBar.style.width) || 5;
-        const targetWidth = '<%= @conversion.status %>' === 'pending' ? 30 : 75;
-        
-        const interval = setInterval(() => {
-          if (width >= targetWidth) {
-            clearInterval(interval);
-          } else {
-            width += 1;
-            progressBar.style.width = width + '%';
-          }
-        }, 200);
+        let targetWidth = status === 'pending' ? 30 : 75;
+        setTimeout(function() {
+          progressBar.style.transition = 'width 2s ease-out';
+          progressBar.style.width = targetWidth + '%';
+        }, 500);
       }
       
-      // Fallback: Auto-refresh page after 30 seconds if still processing
-      setTimeout(function() {
-        const status = document.querySelector('[data-conversion-status-target="statusText"]').textContent.toLowerCase();
-        if (status === 'pending' || status === 'processing') {
-          console.log("Auto-refreshing page to check conversion status");
-          window.location.reload();
-        }
-      }, 30000);
-    <% end %>
-    
-    // Additional fallback: Direct check for completed file
-    <% if @conversion.status != 'completed' && @conversion.file_path.present? %>
-      setTimeout(function() {
-        fetch('/conversions/<%= @conversion.id %>.json?_=' + new Date().getTime())
-          .then(response => response.json())
-          .then(data => {
-            if (data.status === 'completed') {
-              window.location.reload();
-            }
-          }).catch(e => console.error(e));
-      }, 5000);
-    <% end %>
-  });
-</script>
-
-<!-- Additional direct polling mechanism as fallback -->
-<script>
-  <% if @conversion.status != 'completed' %>
-  (function() {
-    let checkCount = 0;
-    const maxChecks = 30; // Check up to 30 times
-    
-    function checkCompletionStatus() {
-      if (checkCount >= maxChecks) return;
-      checkCount++;
+      // Set up auto-refresh
+      const refreshIntervals = [5000, 10000, 15000, 20000, 30000]; // Increasing intervals
+      let refreshCount = 0;
       
-      fetch('/conversions/<%= @conversion.id %>.json?_=' + new Date().getTime())
-        .then(response => response.json())
-        .then(data => {
-          console.log("Direct status check:", data.status);
-          
-          if (data.status === 'completed') {
-            console.log("Conversion complete - updating UI directly");
-            document.querySelector('[data-conversion-status-target="statusText"]').textContent = "Completed";
-            
-            // Show download button
-            const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
-            if (downloadBtn) downloadBtn.classList.remove('hidden');
-            
-            // Show details panel
-            const detailsPanel = document.querySelector('[data-conversion-status-target="details"]');
-            if (detailsPanel) detailsPanel.classList.remove('hidden');
-            
-            // Update title and duration if available
-            if (data.title) {
-              const titleElement = document.querySelector('[data-conversion-status-target="title"]');
-              if (titleElement) titleElement.textContent = data.title;
-            }
-            
-            if (data.duration) {
-              const durationElement = document.querySelector('[data-conversion-status-target="duration"]');
-              if (durationElement) durationElement.textContent = data.duration;
-            }
-            
-            // Complete progress bar
-            const progressBar = document.getElementById('progress-bar');
-            if (progressBar) progressBar.style.width = '100%';
-            
-            // Stop checking
-            return;
-          }
-          
-          // Continue checking if not completed
-          if (data.status === 'pending' || data.status === 'processing') {
-            setTimeout(checkCompletionStatus, 3000); // Check again in 3 seconds
-          }
-        })
-        .catch(e => {
-          console.error("Error checking status:", e);
-          setTimeout(checkCompletionStatus, 3000); // Try again in 3 seconds
-        });
+      function scheduleNextRefresh() {
+        if (refreshCount >= refreshIntervals.length) return;
+        
+        const interval = refreshIntervals[refreshCount];
+        refreshCount++;
+        
+        setTimeout(function() {
+          // Check current status before refreshing
+          fetch('/conversions/<%= @conversion.id %>.json?_=' + new Date().getTime(), {
+            headers: { 'Cache-Control': 'no-cache' }
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.status === 'completed') {
+                // Update UI directly without full page refresh
+                document.getElementById('status-text').textContent = 'Completed';
+                document.getElementById('progress-bar').style.width = '100%';
+                document.getElementById('download-button').classList.remove('hidden');
+                
+                if (data.title) {
+                  document.getElementById('details-panel').classList.remove('hidden');
+                  document.getElementById('title-text').textContent = data.title;
+                  if (data.duration) {
+                    document.getElementById('duration-text').textContent = data.duration;
+                  }
+                }
+              } else if (data.status === 'failed') {
+                // Show error message
+                document.getElementById('status-text').textContent = 'Failed';
+                document.getElementById('error-message').classList.remove('hidden');
+                document.getElementById('error-text').textContent = data.error_message || 'An unknown error occurred';
+              } else {
+                // Schedule next refresh if still processing
+                scheduleNextRefresh();
+              }
+            })
+            .catch(error => {
+              console.error('Error checking status:', error);
+              // Fall back to full page refresh
+              window.location.reload();
+            });
+        }, interval);
+      }
+      
+      // Start refresh cycle
+      scheduleNextRefresh();
     }
-    
-    // Start checking after a short delay
-    setTimeout(checkCompletionStatus, 5000);
-  })();
-  <% end %>
+  });
 </script>
