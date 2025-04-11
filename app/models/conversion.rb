@@ -6,12 +6,19 @@ class Conversion < ApplicationRecord
   }
   validates :quality, inclusion: { in: %w[128 192 320] }
   
+  # Add a callback to extract and save YouTube ID before saving
+  before_save :extract_youtube_id
+  
   # Add a scope for finding old conversions
   scope :old, ->(time = 24.hours.ago) { where("created_at < ?", time) }
   
   # Status options: pending, processing, completed, failed
   
   def youtube_id
+    self[:youtube_id] || extract_youtube_id_from_url
+  end
+  
+  def extract_youtube_id_from_url
     # Extract YouTube ID from URL (including Shorts)
     if url.include?('youtube.com/shorts/')
       # Handle YouTube Shorts URL format
@@ -52,5 +59,11 @@ class Conversion < ApplicationRecord
       end
     end
     true
+  end
+  
+  private
+  
+  def extract_youtube_id
+    self.youtube_id = extract_youtube_id_from_url
   end
 end

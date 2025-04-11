@@ -2,6 +2,7 @@ require 'shellwords'
 
 class ConversionWorker
   include Sidekiq::Worker
+  sidekiq_options retry: 1  # Reduce retries for faster failure detection
   
   def perform(conversion_id)
     begin
@@ -19,13 +20,38 @@ class ConversionWorker
       Rails.logger.info("Extracted video ID: #{video_id}")
       return handle_error(conversion, "Invalid YouTube URL") unless video_id
       
+      # Check for existing processed file with same video and quality - only if the column exists
+      if ActiveRecord::Base.connection.column_exists?(:conversions, :youtube_id)
+        begin
+          existing_conversion = Conversion.where(status: 'completed', 
+                                               youtube_id: video_id, 
+                                               quality: conversion.quality)
+                                         .where('created_at > ?', 12.hours.ago)
+                                         .first
+                      
+          if existing_conversion && File.exist?(existing_conversion.file_path)
+            # Efficiently reuse existing conversion
+            Rails.logger.info("Reusing existing conversion: #{existing_conversion.id}")
+            conversion.update(
+              status: 'completed',
+              title: existing_conversion.title,
+              duration: existing_conversion.duration,
+              file_path: existing_conversion.file_path
+            )
+            return
+          end
+        rescue => e
+          # If any error occurs here, just log it and continue with normal processing
+          Rails.logger.error("Error checking for existing conversion: #{e.message}")
+        end
+      end
+      
       # Set the output path - sanitize to avoid command injection
       output_path = Rails.root.join('storage', 'downloads', "#{video_id}.%(ext)s").to_s
       
-      # Get video info using a direct call to yt-dlp
       begin
-        # Use yt-dlp to get video info - properly escape the URL
-        info_cmd = "yt-dlp -j #{Shellwords.escape(conversion.url)} 2>&1"
+        # Use streamlined yt-dlp info command with optimizations
+        info_cmd = "yt-dlp -j --skip-download --no-playlist --no-warnings #{Shellwords.escape(conversion.url)} 2>&1"
         Rails.logger.info("Executing info command: #{info_cmd}")
         
         video_info_json = `#{info_cmd}`
@@ -33,19 +59,15 @@ class ConversionWorker
         
         Rails.logger.info("yt-dlp info command exit status: #{output_status}")
         
-        # Check for various error patterns in the output string itself
+        # Check for various error patterns
         if !output_status || 
            video_info_json.include?("copyright claim") || 
            video_info_json.include?("Video unavailable") || 
            video_info_json.include?("ERROR:") ||
            video_info_json.include?("error")
           
-          # Generic error message for all issues
           error_message = "Unable to convert this video. It may be unavailable, private, or subject to copyright restrictions."
-          
           Rails.logger.error("Video fetch error: #{error_message}")
-          # Don't log the entire output - it's too verbose
-          
           return handle_error(conversion, error_message)
         end
         
@@ -54,24 +76,22 @@ class ConversionWorker
           Rails.logger.info("Successfully parsed video info JSON")
         rescue JSON::ParserError => e
           Rails.logger.error("JSON parse error: #{e.message}")
-          # Don't log the raw output - it's too verbose
           return handle_error(conversion, "Unable to process video information. Please try a different video.")
         end
         
-        # Validate video duration to allow longer videos but with a reasonable limit
+        # Validate video duration
         if video_info['duration'] && video_info['duration'] > 7200 # 2 hour limit
           Rails.logger.info("Video too long: #{video_info['duration']} seconds")
           return handle_error(conversion, "Video is too long. Please choose a video under 2 hours.")
         end
         
-        # Auto-adjust quality for videos over 1 hour to conserve file size
+        # Auto-adjust quality for longer videos
         original_quality = conversion.quality
         if video_info['duration'] && video_info['duration'] > 3600 && conversion.quality == "320"
-          conversion.quality = "192"
+          conversion.quality = "192" 
           Rails.logger.info("Auto-adjusting quality from #{original_quality} to 192 kbps for long video (#{video_info['duration']} seconds)")
         end
         
-        Rails.logger.info("Updating conversion record with title and duration")
         # Update conversion with video info immediately
         conversion.update(
           title: video_info['title'],
@@ -83,16 +103,18 @@ class ConversionWorker
         return handle_error(conversion, "Failed to fetch video info. Please try a different video.")
       end
       
-      # Download and convert the video using yt-dlp
+      # Download and convert the video using optimized yt-dlp
       begin
+        # Optimize yt-dlp configuration for faster performance
         quality_option = "-f bestaudio --extract-audio --audio-format mp3 --audio-quality #{conversion.quality}"
         output_option = "-o \"#{output_path}\""
-        
-        # Add progress report
         progress_option = "--progress"
         
+        # Add significant performance optimizations
+        optimization_options = "--no-playlist --no-continue --no-part --concurrent-fragments 5 --force-ipv4"
+        
         # Properly shell-escape the URL for security
-        download_cmd = "yt-dlp #{quality_option} #{output_option} #{progress_option} #{Shellwords.escape(conversion.url)}"
+        download_cmd = "yt-dlp #{quality_option} #{output_option} #{progress_option} #{optimization_options} #{Shellwords.escape(conversion.url)}"
         
         Rails.logger.info("Executing download command: #{download_cmd}")
         
@@ -111,7 +133,7 @@ class ConversionWorker
             while wait_thr.alive?
               # Touch the record every 30 seconds to keep it fresh
               Conversion.where(id: conversion.id).update_all(updated_at: Time.now)
-              sleep 30
+              sleep 5  # Check more frequently for better responsiveness
             end
           end
           
@@ -151,10 +173,7 @@ class ConversionWorker
           # Check for error conditions
           unless exit_status.success?
             error_message = "Unable to convert this video. It may be unavailable, private, or subject to copyright restrictions."
-            
             Rails.logger.error("Download failed: #{error_message}")
-            # Don't log the entire output
-            
             return handle_error(conversion, error_message)
           end
         end
