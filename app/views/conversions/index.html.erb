@@ -299,11 +299,38 @@
         statusContainer.innerHTML = html;
         statusContainer.classList.remove('hidden');
         
+        // Important: Check immediately for error messages and make them visible
+        const errorMsg = statusContainer.querySelector('[data-conversion-status-target="errorMessage"]');
+        if (errorMsg) {
+          console.log('Error message container found, making it visible');
+          errorMsg.classList.remove('hidden');
+          
+          // Also ensure the standard "Convert Another" link is hidden if we have an error
+          const convertLink = statusContainer.querySelector('#convert-another-link');
+          if (convertLink) convertLink.classList.add('hidden');
+          
+          // No need to start polling or animation for error states
+          return;
+        }
+        
         // Get initial status
         const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
         const initialStatus = statusText ? statusText.textContent.toLowerCase() : 'pending';
         
-        // Initialize progress bar
+        console.log('Initial status detected:', initialStatus);
+        
+        // Special handling for failed status
+        if (initialStatus === 'failed') {
+          console.log('Failed status detected on initial load');
+          
+          // Force a reload of the status partial to ensure error is shown
+          reloadStatusPartial(conversionId);
+          
+          // No need to start polling or animation
+          return;
+        }
+        
+        // Initialize progress bar for non-error states
         const progressBar = document.getElementById('progress-bar');
         if (progressBar) {
           // Set initial width based on status
@@ -327,8 +354,10 @@
           }
         }
         
-        // Start polling for status updates
-        startPolling(conversionId);
+        // Start polling for status updates if not failed or completed
+        if (initialStatus !== 'failed' && initialStatus !== 'completed') {
+          startPolling(conversionId);
+        }
         
         // Add backup mechanism for very long conversions
         const maxWaitTime = 600000; // 10 minutes
@@ -343,6 +372,27 @@
         alert(`Error loading conversion status: ${error.message}. Redirecting to conversion page...`);
         window.location.href = `/conversions/${conversionId}`;
       });
+  }
+  
+  // Helper function to reload just the status partial
+  function reloadStatusPartial(conversionId) {
+    console.log(`Reloading status partial for conversion ${conversionId}`);
+    fetch(`/conversions/${conversionId}/status?_=${new Date().getTime()}`, {
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+      .then(response => response.text())
+      .then(html => {
+        const statusContainer = document.getElementById('conversion-status-container');
+        statusContainer.innerHTML = html;
+        
+        // Ensure error message is visible if present
+        const errorMsg = statusContainer.querySelector('[data-conversion-status-target="errorMessage"]');
+        if (errorMsg) {
+          console.log("Found error message container after reload, ensuring visibility");
+          errorMsg.classList.remove('hidden');
+        }
+      })
+      .catch(error => console.error("Error reloading status:", error));
   }
   
   // Global variable to track the current animation state
@@ -444,9 +494,6 @@
       currentProgressWidth = targetWidth;
     }
   }
-
-
-    
   
   function startPolling(conversionId) {
     // Clear any existing polling
@@ -499,52 +546,29 @@
       .then(data => {
         console.log("Status received:", data.status, "Error:", data.error_message);
         
-        // Check for failed status immediately
-        if (data.status === 'failed') {
+        // Normalize status to lowercase for consistent comparison
+        // Use toString() to handle potential null values
+        const status = (data.status || "").toString().toLowerCase();
+        
+        // Check for failed status immediately (case insensitive)
+        if (status === 'failed') {
           console.log("Conversion failed, updating UI immediately...");
           
-          // Stop animation and polling immediately
-          stopProgressAnimation();
+          // For failed status, completely reload the status partial
+          // This is more reliable than trying to update individual elements
           clearPolling();
+          stopProgressAnimation();
           
-          // Update status text
-          const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
-          if (statusText) {
-            statusText.textContent = 'Failed';
-          }
-          
-          // Show error message
-          const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
-          const errorText = document.querySelector('[data-conversion-status-target="errorText"]');
-          
-          if (errorMsg) {
-            errorMsg.classList.remove('hidden');
-          }
-          
-          if (errorText && data.error_message) {
-            errorText.textContent = data.error_message;
-          }
-          
-          // Hide the regular "Convert Another Video" link in favor of the error-specific one
-          const convertAnotherLink = document.querySelector('.mt-4.text-center');
-          if (convertAnotherLink) {
-            convertAnotherLink.classList.add('hidden');
-          }
-          
-          // Hide the manual refresh button if it's visible
-          const manualRefresh = document.getElementById('manual-refresh');
-          if (manualRefresh) {
-            manualRefresh.classList.add('hidden');
-          }
-          
-          return; // Stop further processing
+          // Reload the entire partial instead of manipulating DOM elements
+          reloadStatusPartial(conversionId);
+          return;
         }
         
         // For non-failed statuses, update normally
         updateStatusUI(data);
         
         // If completed, stop polling
-        if (data.status === 'completed') {
+        if (status === 'completed') {
           clearPolling();
         }
       })
@@ -555,16 +579,19 @@
   }
   
   function updateStatusUI(data) {
-    // Update the status text
+    // Normalize status for consistent handling
+    const status = (data.status || "").toString().toLowerCase();
+
+    // Update the status text - important to maintain case consistency
     const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
     if (statusText) {
-      statusText.textContent = capitalizeFirstLetter(data.status);
+      statusText.textContent = capitalizeFirstLetter(status);
     }
     
     // Update progress container class for processing state
     const progressContainer = document.querySelector('.progress-container');
     if (progressContainer) {
-      if (data.status === 'processing') {
+      if (status === 'processing') {
         progressContainer.classList.add('processing');
       } else {
         progressContainer.classList.remove('processing');
@@ -572,11 +599,11 @@
     }
     
     // For completed status, immediately show 100% before showing download button
-    if (data.status === 'completed') {
+    if (status === 'completed') {
       // First update progress to 100%
       updateProgressBar('completed');
       
-      // Then show download button
+      // Show download button
       const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
       if (downloadBtn) {
         downloadBtn.classList.remove('hidden');
@@ -598,84 +625,57 @@
           durationElement.textContent = data.duration;
         }
       }
-    } else if (data.status === 'failed') {
-      // Stop progress animation immediately
-      stopProgressAnimation();
-      
-      // Show error message
-      const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
-      const errorText = document.querySelector('[data-conversion-status-target="errorText"]');
-      
-      if (errorMsg) {
-        errorMsg.classList.remove('hidden');
-        
-        // Add appropriate classes based on error type
-        if (data.error_message && data.error_message.includes('copyright claim')) {
-          errorMsg.querySelector('div').classList.add('border-yellow-500', 'bg-yellow-50', 'text-yellow-800');
-        }
-      }
-      
-      if (errorText && data.error_message) {
-        errorText.textContent = data.error_message;
-      }
-      
-      // Clear any pending status checks or refresh notices
-      clearPolling();
-      
-      // Remove any existing "check status" or "refresh" buttons
-      const existingButtons = document.querySelectorAll('.status-check-button, .refresh-notice');
-      existingButtons.forEach(button => button.remove());
-    } else {
-      // For pending or processing, update progress normally
-      updateProgressBar(data.status);
     }
   }
   
   function checkFinalStatus(conversionId) {
-    const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
-    if (statusText && statusText.textContent.toLowerCase() !== 'completed' && statusText.textContent.toLowerCase() !== 'failed') {
-      console.log("Performing backup status check after max wait time");
+    console.log("Performing final status check after max wait time");
+    
+    fetch(`/conversions/${conversionId}.json?_=${new Date().getTime()}`, {
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      // Normalize status to handle potential null values
+      const status = (data.status || "").toString().toLowerCase();
       
-      fetch(`/conversions/${conversionId}.json?_=${new Date().getTime()}`, {
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      })
-      .then(response => response.json())
-      .then(data => {
-        // Only show completion message if status is actually completed
-        if (data.status === 'completed') {
-          console.log("Backup check: Conversion is actually complete - updating UI");
-          
-          // Update UI to show completed
-          statusText.textContent = "Completed";
-          
-          // Update progress bar to 100% - force instant update
-          updateProgressBar('completed', true);
-          
-          // Show download button
-          const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
-          if (downloadBtn) downloadBtn.classList.remove('hidden');
-          
-          // Show user a helpful message
-          console.log("Adding auto-refresh notice");
-          const refreshNotice = document.createElement('div');
-          refreshNotice.className = 'mt-4 text-indigo-600 text-center refresh-notice';
-          refreshNotice.innerHTML = 'Processing complete! If the download button doesn\'t appear, please <a href="javascript:window.location.reload()" class="underline">refresh the page</a>.';
+      console.log("Final status check result:", status, data.error_message);
+      
+      // If status is failed, force a reload of the partial
+      if (status === 'failed') {
+        console.log("Final check detected failed status, reloading partial");
+        clearPolling();
+        stopProgressAnimation();
+        reloadStatusPartial(conversionId);
+      }
+      // For completed status, update the UI
+      else if (status === 'completed') {
+        console.log("Backup check: Conversion is actually complete - updating UI");
+        
+        // Update UI to show completed
+        const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
+        if (statusText) statusText.textContent = "Completed";
+        
+        // Update progress bar to 100% - force instant update
+        updateProgressBar('completed', true);
+        
+        // Show download button
+        const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
+        if (downloadBtn) downloadBtn.classList.remove('hidden');
+        
+        // Show user a helpful message
+        console.log("Adding auto-refresh notice");
+        const refreshNotice = document.createElement('div');
+        refreshNotice.className = 'mt-4 text-indigo-600 text-center refresh-notice';
+        refreshNotice.innerHTML = 'Processing complete! If the download button doesn\'t appear, please <a href="javascript:window.location.reload()" class="underline">refresh the page</a>.';
+        if (statusText && statusText.parentNode) {
           statusText.parentNode.appendChild(refreshNotice);
-        } 
-        // Handle failed status
-        else if (data.status === 'failed') {
-          // Just update the status text, the error message should already be shown
-          statusText.textContent = "Failed";
-          
-          // Make sure error message is visible
-          const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
-          if (errorMsg) errorMsg.classList.remove('hidden');
         }
-      })
-      .catch(error => console.error("Error in backup check:", error));
-    }
+      }
+    })
+    .catch(error => console.error("Error in final check:", error));
   }
   
   function capitalizeFirstLetter(string) {

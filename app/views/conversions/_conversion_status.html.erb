@@ -1,16 +1,30 @@
-<%# app/views/conversions/_conversion_status.html.erb %>
-
 <div class="bg-white shadow-md rounded-lg p-6 mb-8 status-container" data-controller="conversion-status" data-conversion-status-id-value="<%= conversion.id %>">
   <h2 class="text-xl font-semibold text-gray-800 mb-4">Converting Your Video</h2>
   
-  <%# FIX: Changed to status.to_s.downcase == 'failed' to ensure proper string comparison %>
-  <% if conversion.status.to_s.downcase == 'failed' %>
-    <!-- Error status - show only error message, nothing else -->
-    <div data-conversion-status-target="errorMessage">
-      <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert">
+  <%# Debug information to see what state we're actually getting %>
+  <% if Rails.env.development? %>
+    <!-- Debug Info (remove in production) -->
+    <div class="text-xs text-gray-400 mb-2">
+      Status: "<%= conversion.status %>" | 
+      Status downcase: "<%= conversion.status.to_s.downcase %>" | 
+      Is failed?: <%= conversion.status.to_s.downcase == 'failed' ? 'Yes' : 'No' %>
+    </div>
+  <% end %>
+  
+  <%# IMPORTANT: Force the condition to be explicit and separate from the HTML %>
+  <% is_failed = conversion.status.to_s.downcase == 'failed' %>
+  
+  <% if is_failed %>
+    <!-- Error status - always show error message -->
+    <div data-conversion-status-target="errorMessage" class="error-message-container">
+      <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-4" role="alert">
         <p class="font-medium">Unable to convert this video</p>
         <p class="mt-2"><span data-conversion-status-target="errorText"><%= conversion.error_message.presence || "An unknown error occurred. Please try a different video." %></span></p>
         <p class="mt-4">Please try again with a different video.</p>
+      </div>
+      <!-- Always include a prominent button inside the error message container -->
+      <div class="mt-6">
+        <%= link_to "Convert Another Video", root_path, class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" %>
       </div>
     </div>
   <% else %>
@@ -64,15 +78,14 @@
     <div data-conversion-status-target="downloadButton" class="<%= 'hidden' unless conversion.status == 'completed' %>">
       <%= link_to "Download MP3", download_conversion_path(conversion), class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" %>
     </div>
+    
+    <!-- Only show this for non-failed status -->
+    <div class="mt-4 text-center" id="convert-another-link">
+      <%= link_to "Convert Another Video", root_path, class: "text-indigo-600 hover:text-indigo-800" %>
+    </div>
   <% end %>
-
-  <!-- Always show this section regardless of status -->
-  <%# FIX: Removed the hidden class and ensure it's never hidden %>
-  <div class="mt-4 text-center">
-    <%= link_to "Convert Another Video", "/", class: "text-indigo-600 hover:text-indigo-800" %>
-  </div>
-
-  <% if conversion.status != 'completed' && conversion.status != 'failed' %>
+  
+  <% if !is_failed && conversion.status != 'completed' %>
     <div id="manual-refresh" class="mt-6 hidden">
       <p class="text-sm text-gray-600 mb-2">Is your download taking longer than expected?</p>
       <button onclick="window.location.reload()" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
@@ -82,35 +95,44 @@
   <% end %>
 </div>
 
-<%# Add this for immediate status checking when "failed" %>
-<% if conversion.status.to_s.downcase == 'failed' %>
 <script>
-  // Ensure error message is visible
+  // Ensure error message is properly shown on page load if status is failed
   document.addEventListener('DOMContentLoaded', function() {
-    console.log("Failed status detected, ensuring error message is visible");
-    const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
-    if (errorMsg) errorMsg.classList.remove('hidden');
-  });
-</script>
-<% end %>
-
-<script>
-  // Show the manual refresh button after 60 seconds if conversion is still in progress
-  document.addEventListener('DOMContentLoaded', function() {
-    const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
-    const conversionStatus = '<%= conversion.status %>';
+    const statusContainer = document.querySelector('.status-container');
+    // Check if we're dealing with a failed status - verify with a data attribute
+    <% if is_failed %>
+      console.log("Initial page load: Failed status detected");
+      // Directly find and show the error message container
+      const errorMsg = document.querySelector('[data-conversion-status-target="errorMessage"]');
+      if (errorMsg) {
+        console.log("Found error message container, ensuring it's visible");
+        errorMsg.classList.remove('hidden');
+        
+        // Make sure convert-another-link is NOT shown (redundant with the button in error message)
+        const convertAnotherLink = document.getElementById('convert-another-link');
+        if (convertAnotherLink) {
+          console.log("Hiding standard convert another link");
+          convertAnotherLink.classList.add('hidden');
+        }
+      } else {
+        console.error("Error message container not found");
+      }
+    <% end %>
     
-    // Only show manual refresh for pending/processing statuses, not for errors or completed
+    // Show the manual refresh button after 60 seconds if conversion is still in progress
+    const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
+    const conversionStatus = '<%= conversion.status.to_s.downcase %>';
+    
     if ((statusText && (statusText.textContent.toLowerCase() === 'pending' || 
-                        statusText.textContent.toLowerCase() === 'processing')) &&
+                       statusText.textContent.toLowerCase() === 'processing')) &&
         conversionStatus !== 'failed' && conversionStatus !== 'completed') {
       
       setTimeout(function() {
         const currentStatus = document.querySelector('[data-conversion-status-target="statusText"]')?.textContent.toLowerCase();
         const manualRefresh = document.getElementById('manual-refresh');
         
-        if (currentStatus === 'pending' || currentStatus === 'processing') {
-          if (manualRefresh) manualRefresh.classList.remove('hidden');
+        if ((currentStatus === 'pending' || currentStatus === 'processing') && manualRefresh) {
+          manualRefresh.classList.remove('hidden');
         }
       }, 60000); // 1 minute
     }

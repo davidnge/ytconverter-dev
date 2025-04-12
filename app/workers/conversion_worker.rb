@@ -49,96 +49,78 @@ class ConversionWorker
       # Set the output path - sanitize to avoid command injection
       output_path = Rails.root.join('storage', 'downloads', "#{video_id}.%(ext)s").to_s
       
+      # Main single-pass conversion approach
       begin
-        # Use streamlined yt-dlp info command with optimizations 
-        # This is more reliable than combining commands - improves total speed by a lot
-        info_cmd = "yt-dlp -j --skip-download --geo-bypass #{Shellwords.escape(conversion.url)} 2>&1"
-        Rails.logger.info("Executing info command: #{info_cmd}")
+        # Fast but still reliable options
+        quality_option = "--extract-audio --audio-format mp3 --audio-quality #{conversion.quality}"
+        output_option = "-o \"#{output_path}\""
+        format_option = "-f bestaudio"
         
-        video_info_json = `#{info_cmd}`
-        output_status = $?.success?
+        # Speed optimizations that don't sacrifice reliability
+        speed_options = "--geo-bypass --no-playlist --concurrent-fragments 8"
         
-        Rails.logger.info("yt-dlp info command exit status: #{output_status}")
+        # Combined command for downloading and extracting in a single pass
+        download_cmd = "yt-dlp #{format_option} #{quality_option} #{output_option} #{speed_options} #{Shellwords.escape(conversion.url)} 2>&1"
         
-        # Check for various error patterns
-        if !output_status || 
-           video_info_json.include?("copyright claim") || 
-           video_info_json.include?("Video unavailable") || 
-           video_info_json.include?("ERROR:") ||
-           video_info_json.include?("error")
+        Rails.logger.info("Executing optimized command: #{download_cmd}")
+        
+        # Execute and capture output
+        download_output = `#{download_cmd}`
+        download_status = $?.success?
+        
+        # Check for errors in output
+        if !download_status || 
+           download_output.include?("copyright claim") || 
+           download_output.include?("Video unavailable") || 
+           download_output.include?("ERROR:") ||
+           download_output.include?("error") ||
+           download_output.include?("not available")
           
-          error_message = "Unable to convert this video. It may be unavailable, private, or subject to copyright restrictions."
-          Rails.logger.error("Video fetch error: #{error_message}")
-          return handle_error(conversion, error_message)
-        end
-        
-        begin
-          # Skip any warnings or preceding text if present (only take valid JSON)
-          json_start = video_info_json.index('{')
-          if json_start && json_start > 0
-            video_info_json = video_info_json[json_start..-1]
+          # Try to extract a more specific error message for the user
+          error_message = if download_output.include?("copyright claim")
+            "This video cannot be converted due to copyright restrictions."
+          elsif download_output.include?("Video unavailable") || download_output.include?("not available")
+            "This video is unavailable or has been removed."
+          elsif download_output.include?("This video is private")
+            "This video is private and cannot be accessed."
+          elsif download_output.include?("sign in")
+            "This video requires a sign-in to access."
+          else
+            "Unable to convert this video. It may be unavailable, private, or subject to copyright restrictions."
           end
           
-          video_info = JSON.parse(video_info_json)
-          Rails.logger.info("Successfully parsed video info JSON")
-        rescue JSON::ParserError => e
-          Rails.logger.error("JSON parse error: #{e.message}")
-          return handle_error(conversion, "Unable to process video information. Please try a different video.")
-        end
-        
-        # Validate video duration
-        if video_info['duration'] && video_info['duration'] > 7200 # 2 hour limit
-          Rails.logger.info("Video too long: #{video_info['duration']} seconds")
-          return handle_error(conversion, "Video is too long. Please choose a video under 2 hours.")
-        end
-        
-        # Auto-adjust quality for longer videos
-        original_quality = conversion.quality
-        if video_info['duration'] && video_info['duration'] > 3600 && conversion.quality == "320"
-          conversion.quality = "192" 
-          Rails.logger.info("Auto-adjusting quality from #{original_quality} to 192 kbps for long video (#{video_info['duration']} seconds)")
-        end
-        
-        # Update conversion with video info immediately
-        conversion.update(
-          title: video_info['title'],
-          duration: video_info['duration'].to_i,
-          quality: conversion.quality # This will save the possibly adjusted quality
-        )
-      rescue => e
-        Rails.logger.error("Video info error: #{e.message}")
-        return handle_error(conversion, "Failed to fetch video info. Please try a different video.")
-      end
-      
-      # Download and convert the video using yt-dlp - separate for better reliability
-      begin
-        # Optimize yt-dlp configuration for faster performance - but keep it simple
-        quality_option = "-f bestaudio --extract-audio --audio-format mp3 --audio-quality #{conversion.quality}"
-        output_option = "-o \"#{output_path}\""
-        progress_option = "--progress"
-        
-        # Add minimal optimizations that are known to work reliably
-        optimization_options = "--geo-bypass"
-        
-        # Properly shell-escape the URL for security
-        download_cmd = "yt-dlp #{quality_option} #{output_option} #{progress_option} #{optimization_options} #{Shellwords.escape(conversion.url)}"
-        
-        Rails.logger.info("Executing download command: #{download_cmd}")
-        
-        # Use system to run the command directly - it should work reliably in all environments
-        system_result = system(download_cmd)
-        
-        Rails.logger.info("Download command result: #{system_result}")
-        
-        # Check for success
-        unless system_result
-          error_message = "Unable to convert this video. It may be unavailable, private, or subject to copyright restrictions."
           Rails.logger.error("Download failed: #{error_message}")
           return handle_error(conversion, error_message)
         end
+        
+        # Extract duration and title from output if possible
+        begin
+          # Try to get the title from the output
+          title_match = download_output.match(/\[download\]\s+[^\n]+?of\s+[^\n]+?\s+"([^"]+)"/)
+          title = title_match ? title_match[1] : nil
+          
+          # Try to get duration from output - this is a bit trickier
+          duration_match = download_output.match(/Duration:\s+(\d+):(\d+)/)
+          duration = nil
+          if duration_match
+            minutes = duration_match[1].to_i
+            seconds = duration_match[2].to_i
+            duration = minutes * 60 + seconds
+          end
+          
+          # Update metadata if we found anything
+          updates = {}
+          updates[:title] = title if title
+          updates[:duration] = duration if duration
+          
+          conversion.update(updates) unless updates.empty?
+        rescue => e
+          Rails.logger.warn("Non-critical error parsing output: #{e.message}")
+          # Continue anyway, this is just metadata
+        end
       rescue => e
         Rails.logger.error("Conversion error: #{e.message}")
-        handle_error(conversion, "Download failed. Please try a different video.")
+        return handle_error(conversion, "Download failed: #{e.message.to_s.truncate(100)}. Please try a different video.")
       end
       
       # Get the actual file path
@@ -146,7 +128,7 @@ class ConversionWorker
       
       Rails.logger.info("Checking for MP3 file at: #{mp3_path}")
       
-      # Wait a moment for the file to be fully written
+      # Wait for file to be fully written
       sleep(1)
       
       if File.exist?(mp3_path)
@@ -167,6 +149,37 @@ class ConversionWorker
           return handle_error(conversion, "The generated MP3 file is invalid. Please try a different video.")
         end
         
+        # If we still don't have a title, try to get it from ID3 tags
+        if conversion.title.blank?
+          begin
+            require 'open3'
+            # Use ffprobe to get metadata - fast and usually pre-installed
+            ffprobe_cmd = "ffprobe -v quiet -print_format json -show_format \"#{mp3_path}\""
+            metadata_json, status = Open3.capture2(ffprobe_cmd)
+            
+            if status.success?
+              metadata = JSON.parse(metadata_json)
+              if metadata && metadata['format'] && metadata['format']['tags']
+                # Get title from ID3 tags
+                tags = metadata['format']['tags']
+                title = tags['title'] || tags['TITLE']
+                # Get duration from format info
+                duration = metadata['format']['duration'].to_f.round if metadata['format']['duration']
+                
+                # Update if we found anything
+                updates = {}
+                updates[:title] = title if title
+                updates[:duration] = duration if duration && conversion.duration.nil?
+                
+                conversion.update(updates) unless updates.empty?
+              end
+            end
+          rescue => e
+            Rails.logger.warn("Non-critical error getting metadata: #{e.message}")
+            # Continue anyway, this is just optional metadata
+          end
+        end
+        
         # Successfully completed - update the record
         conversion.update(
           status: 'completed',
@@ -179,13 +192,19 @@ class ConversionWorker
         conversion.touch
       else
         Rails.logger.error("MP3 file was not created at: #{mp3_path}")
-        handle_error(conversion, "MP3 file was not created successfully. Please try a different video.")
+        if defined?(download_output)
+          Rails.logger.error("Download output: #{download_output.truncate(500)}")
+        end
+        return handle_error(conversion, "MP3 file was not created successfully. Please try a different video.")
       end
     rescue => e
       Rails.logger.error("Unhandled error in ConversionWorker: #{e.message}")
+      Rails.logger.error(e.backtrace.join("\n")) if e.backtrace
+      
       begin
         conversion = Conversion.find(conversion_id) if defined?(conversion_id)
-        handle_error(conversion, "An unexpected error occurred. Please try a different video.") if conversion
+        message = "An unexpected error occurred: #{e.message.to_s.truncate(100)}. Please try a different video."
+        handle_error(conversion, message) if conversion
       rescue => nested_error
         Rails.logger.error("Failed to handle error: #{nested_error.message}")
       end
@@ -198,6 +217,7 @@ class ConversionWorker
     Rails.logger.error("Setting error for conversion #{conversion.id}: #{message}")
     
     # Make sure to clear any existing title, duration data to prevent showing old conversion details
+    # IMPORTANT: Always ensure status is exactly 'failed' in lowercase for consistent detection
     conversion.update(
       status: 'failed',
       error_message: message,
@@ -205,6 +225,12 @@ class ConversionWorker
       duration: nil,
       file_path: nil
     )
+    
+    # Force a reload to ensure database has the updated state
+    conversion.reload
+    
+    # Log the state after update to help with debugging
+    Rails.logger.info("Conversion #{conversion.id} error state set: status=#{conversion.status}, message=#{conversion.error_message}")
   end
 end
 
