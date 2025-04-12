@@ -665,14 +665,6 @@
         const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
         if (downloadBtn) downloadBtn.classList.remove('hidden');
         
-        // Show user a helpful message
-        console.log("Adding auto-refresh notice");
-        const refreshNotice = document.createElement('div');
-        refreshNotice.className = 'mt-4 text-indigo-600 text-center refresh-notice';
-        refreshNotice.innerHTML = 'Processing complete! If the download button doesn\'t appear, please <a href="javascript:window.location.reload()" class="underline">refresh the page</a>.';
-        if (statusText && statusText.parentNode) {
-          statusText.parentNode.appendChild(refreshNotice);
-        }
       }
     })
     .catch(error => console.error("Error in final check:", error));

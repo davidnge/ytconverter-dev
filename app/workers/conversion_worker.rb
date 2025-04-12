@@ -55,8 +55,8 @@ class ConversionWorker
         # Format selection is critical - directly request audio formats 
         format_option = "-f 251/140/250/249/bestaudio[ext=webm]/m4a"
         
-        # Quality settings for output
-        quality_option = "--extract-audio --audio-format mp3 --audio-quality #{conversion.quality}"
+        # Quality settings for output - add --embed-metadata to preserve title in the MP3
+        quality_option = "--extract-audio --audio-format mp3 --audio-quality #{conversion.quality} --embed-metadata"
         output_option = "-o \"#{output_path}\""
         
         # Critical speed options:
@@ -76,17 +76,18 @@ class ConversionWorker
         
         Rails.logger.info("Executing ultra-optimized command: #{download_cmd}")
         
-        # Execute with timeout
+        # Execute with increased timeout - simply increase the timeout to 10 minutes (600 seconds)
         require 'timeout'
         download_output = ""
         
         begin
-          Timeout.timeout(120) do
+          # Increase timeout from 120 seconds to 600 seconds (10 minutes)
+          Timeout.timeout(600) do
             download_output = `#{download_cmd}`
           end
           download_status = $?.success?
         rescue Timeout::Error
-          Rails.logger.error("Command timed out after 120 seconds")
+          Rails.logger.error("Command timed out after 600 seconds")
           return handle_error(conversion, "Conversion timed out. Please try a different video.")
         end
         
@@ -111,6 +112,13 @@ class ConversionWorker
           Rails.logger.debug("Download output: #{download_output.truncate(500)}")
           return handle_error(conversion, error_message)
         end
+        
+        # Try to extract video title from download output
+        youtube_title = nil
+        if download_output =~ /\[download\] Destination: (.+?)$/
+          youtube_title = $1.strip.gsub(/\.\w+$/, '')  # Strip file extension
+        end
+        Rails.logger.info("Extracted title from output: #{youtube_title}") if youtube_title
       rescue => e
         Rails.logger.error("Conversion error: #{e.message}")
         return handle_error(conversion, "Download failed. Please try a different video.")
@@ -166,7 +174,7 @@ class ConversionWorker
         
         # Update title info if available
         updates = {}
-        updates[:title] = title || video_id
+        updates[:title] = title || youtube_title || video_id
         updates[:duration] = duration if duration
         
         # Mark as completed and save metadata

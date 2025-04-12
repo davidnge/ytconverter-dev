@@ -1,16 +1,6 @@
 <div class="bg-white shadow-md rounded-lg p-6 mb-8 status-container" data-controller="conversion-status" data-conversion-status-id-value="<%= conversion.id %>">
   <h2 class="text-xl font-semibold text-gray-800 mb-4">Converting Your Video</h2>
   
-  <%# Debug information to see what state we're actually getting %>
-  <% if Rails.env.development? %>
-    <!-- Debug Info (remove in production) -->
-    <div class="text-xs text-gray-400 mb-2">
-      Status: "<%= conversion.status %>" | 
-      Status downcase: "<%= conversion.status.to_s.downcase %>" | 
-      Is failed?: <%= conversion.status.to_s.downcase == 'failed' ? 'Yes' : 'No' %>
-    </div>
-  <% end %>
-  
   <%# IMPORTANT: Force the condition to be explicit and separate from the HTML %>
   <% is_failed = conversion.status.to_s.downcase == 'failed' %>
   
@@ -42,10 +32,7 @@
                style="width: <%= conversion.status == 'completed' ? '100%' : (conversion.status == 'processing' ? '40%' : '5%') %>;"
                data-conversion-status-target="progressBar"></div>
         </div>
-        <div class="text-xs text-gray-500 mt-1">
-          <%= conversion.status == 'completed' ? 'Conversion complete!' : 
-              (conversion.status == 'processing' ? 'Converting your audio...' : 'Starting conversion...') %>
-        </div>
+
       </div>
     </div>
     
