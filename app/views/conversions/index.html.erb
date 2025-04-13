@@ -330,30 +330,6 @@
           return;
         }
         
-        // Initialize progress bar for non-error states
-        const progressBar = document.getElementById('progress-bar');
-        if (progressBar) {
-          // Set initial width based on status
-          if (initialStatus === 'completed') {
-            progressBar.style.width = '100%';
-            currentProgressWidth = 100;
-          } else if (initialStatus === 'processing') {
-            progressBar.style.width = '40%';
-            currentProgressWidth = 40;
-            // Start continuous animation for processing
-            setTimeout(() => {
-              startProgressAnimation();
-            }, 300);
-          } else {
-            progressBar.style.width = '5%';
-            currentProgressWidth = 5;
-            // For pending, animate to 15% first, then continue with polling
-            setTimeout(() => {
-              updateProgressBar('pending');
-            }, 300);
-          }
-        }
-        
         // Start polling for status updates if not failed or completed
         if (initialStatus !== 'failed' && initialStatus !== 'completed') {
           startPolling(conversionId);
@@ -393,106 +369,6 @@
         }
       })
       .catch(error => console.error("Error reloading status:", error));
-  }
-  
-  // Global variable to track the current animation state
-  let currentProgressWidth = 0;
-  let progressAnimationActive = false;
-
-  function startProgressAnimation() {
-    const progressBar = document.getElementById('progress-bar');
-    if (!progressBar) return;
-    
-    // Clear any existing animation interval
-    stopProgressAnimation();
-    
-    // Start from current position or 5% if not set
-    currentProgressWidth = parseInt(progressBar.style.width) || 5;
-    progressBar.style.width = `${currentProgressWidth}%`;
-    
-    // Flag that animation is active
-    progressAnimationActive = true;
-    
-    // Create a more balanced animation that better matches the conversion process
-    // Now slower at the start and faster at the end
-    window.progressAnimationInterval = setInterval(() => {
-      // Stop if we've reached near 100% or animation is no longer active
-      if (currentProgressWidth >= 95 || !progressAnimationActive) {
-        stopProgressAnimation();
-        return;
-      }
-      
-      // Calculate increment based on current progress
-      // Adjusted to be slower at start, moderate in middle, and faster toward end
-      let increment;
-      
-      if (currentProgressWidth < 20) {
-        // Slower start (0-20%)
-        increment = 0.2;
-      } else if (currentProgressWidth < 50) {
-        // Medium speed (20-50%)
-        increment = 0.25;
-      } else if (currentProgressWidth < 70) {
-        // Slightly faster (50-70%)
-        increment = 0.3;
-      } else {
-        // Fastest at the end (70-95%)
-        increment = 0.4;
-      }
-      
-      // Update the current width
-      currentProgressWidth += increment;
-      progressBar.style.width = `${currentProgressWidth}%`;
-    }, 200); // Update every 200ms for smooth animation
-  }
-
-  function stopProgressAnimation() {
-    progressAnimationActive = false;
-    if (window.progressAnimationInterval) {
-      clearInterval(window.progressAnimationInterval);
-      window.progressAnimationInterval = null;
-    }
-  }
-
-  function updateProgressBar(status, instant = false) {
-    const progressBar = document.getElementById('progress-bar');
-    if (!progressBar) return;
-
-    let targetWidth;
-    
-    switch(status) {
-      case 'pending':
-        targetWidth = 10;
-        break;
-      case 'processing':
-        // For processing, continue the animation instead of setting a fixed width
-        if (!progressAnimationActive) {
-          startProgressAnimation();
-        }
-        return;
-      case 'completed':
-        // For completed, jump to 100% immediately
-        stopProgressAnimation();
-        targetWidth = 100;
-        instant = true; // Always use instant transition for completion
-        break;
-      case 'failed':
-        // Stop animation and keep current width
-        stopProgressAnimation();
-        return;
-      default:
-        return;
-    }
-    
-    // Set the width with or without animation
-    if (instant) {
-      currentProgressWidth = targetWidth;
-      progressBar.style.width = `${targetWidth}%`;
-    } else {
-      // Simple transition to target
-      progressBar.style.width = `${targetWidth}%`;
-      currentProgressWidth = targetWidth;
-    }
   }
   
   function startPolling(conversionId) {
@@ -557,7 +433,6 @@
           // For failed status, completely reload the status partial
           // This is more reliable than trying to update individual elements
           clearPolling();
-          stopProgressAnimation();
           
           // Reload the entire partial instead of manipulating DOM elements
           reloadStatusPartial(conversionId);
@@ -601,7 +476,11 @@
     // For completed status, immediately show 100% before showing download button
     if (status === 'completed') {
       // First update progress to 100%
-      updateProgressBar('completed');
+      const progressBar = document.getElementById('progress-bar');
+      if (progressBar) {
+        progressBar.style.transition = 'width 0.5s ease-out';
+        progressBar.style.width = '100%';
+      }
       
       // Show download button
       const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
@@ -647,7 +526,6 @@
       if (status === 'failed') {
         console.log("Final check detected failed status, reloading partial");
         clearPolling();
-        stopProgressAnimation();
         reloadStatusPartial(conversionId);
       }
       // For completed status, update the UI
@@ -659,12 +537,15 @@
         if (statusText) statusText.textContent = "Completed";
         
         // Update progress bar to 100% - force instant update
-        updateProgressBar('completed', true);
+        const progressBar = document.getElementById('progress-bar');
+        if (progressBar) {
+          progressBar.style.transition = 'width 0.5s ease-out';
+          progressBar.style.width = '100%';
+        }
         
         // Show download button
         const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
         if (downloadBtn) downloadBtn.classList.remove('hidden');
-        
       }
     })
     .catch(error => console.error("Error in final check:", error));
@@ -679,12 +560,6 @@
     if (pollingInterval) {
       clearInterval(pollingInterval);
       pollingInterval = null;
-    }
-    
-    // Also clear any progress animation
-    if (window.progressAnimationInterval) {
-      clearInterval(window.progressAnimationInterval);
-      window.progressAnimationInterval = null;
     }
   }
   
