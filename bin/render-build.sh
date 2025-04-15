@@ -10,8 +10,9 @@ pip3 install yt-dlp
 
 # Build commands
 bundle install
-bundle exec rake assets:precompile
-bundle exec rake db:migrate
+
+# Database setup - more comprehensive approach
+bundle exec rails db:create db:migrate
 
 # Ensure storage directories exist
 mkdir -p storage/downloads
