@@ -8,15 +8,6 @@ class ConversionWorker
     begin
       Rails.logger.info("Starting conversion for ID: #{conversion_id}")
 
-      # Debug database state
-      Rails.logger.info("Database path: #{ActiveRecord::Base.connection_db_config.configuration_hash[:database]}")
-      Rails.logger.info("All conversion IDs: #{Conversion.pluck(:id).inspect}")
-    
-      # Check if conversion exists
-      unless Conversion.exists?(conversion_id)
-        Rails.logger.error("Conversion #{conversion_id} not found, skipping")
-        return
-      end
 
       conversion = Conversion.find(conversion_id)
       conversion.update(status: 'processing')

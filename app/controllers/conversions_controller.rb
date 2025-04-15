@@ -13,7 +13,7 @@ class ConversionsController < ApplicationController
     
     if @conversion.save
       # Enqueue background job to process the conversion
-      ConversionWorker.perform_in(2.seconds, @conversion.id)
+      ConversionWorker.perform_async(@conversion.id)
       
       respond_to do |format|
         format.html { redirect_to root_path(conversion_id: @conversion.id) }
