@@ -7,6 +7,13 @@ class ConversionWorker
   def perform(conversion_id)
     begin
       Rails.logger.info("Starting conversion for ID: #{conversion_id}")
+
+      # Check if conversion exists
+      unless Conversion.exists?(conversion_id)
+        Rails.logger.error("Conversion #{conversion_id} not found, skipping")
+        return
+      end
+
       conversion = Conversion.find(conversion_id)
       conversion.update(status: 'processing')
       
