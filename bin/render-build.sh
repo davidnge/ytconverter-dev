@@ -12,10 +12,15 @@ pip3 install yt-dlp
 bundle install
 bundle exec rake assets:precompile
 
-# Database commands - be explicit
-bundle exec rails db:create
-bundle exec rails db:schema:load
-bundle exec rails db:migrate
+# Database commands - focus on primary schema
+RAILS_ENV=production bundle exec rails db:create:primary || true
+RAILS_ENV=production bundle exec rails db:schema:load:primary || true
+RAILS_ENV=production bundle exec rails db:migrate:primary || true
+
+# Create the other databases if needed
+RAILS_ENV=production bundle exec rails db:create:cache || true
+RAILS_ENV=production bundle exec rails db:create:queue || true
+RAILS_ENV=production bundle exec rails db:create:cable || true
 
 # Ensure storage directories exist
 mkdir -p storage/downloads
