@@ -15,6 +15,8 @@ gem 'sitemap_generator'
 
 gem 'pg', '~> 1.5', '>= 1.5.9'
 
+gem 'aws-sdk-s3', '~> 1.183'
+
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "~> 8.0.2"

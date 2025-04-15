@@ -12,15 +12,10 @@ pip3 install yt-dlp
 bundle install
 bundle exec rake assets:precompile
 
-# Database commands - focus on primary schema
-RAILS_ENV=production bundle exec rails db:create:primary || true
-RAILS_ENV=production bundle exec rails db:schema:load:primary || true
-RAILS_ENV=production bundle exec rails db:migrate:primary || true
-
-# Create the other databases if needed
-RAILS_ENV=production bundle exec rails db:create:cache || true
-RAILS_ENV=production bundle exec rails db:create:queue || true
-RAILS_ENV=production bundle exec rails db:create:cable || true
+# Database commands for PostgreSQL
+RAILS_ENV=production bundle exec rails db:create || true
+RAILS_ENV=production bundle exec rails db:schema:load || true
+RAILS_ENV=production bundle exec rails db:migrate || true
 
 # Ensure storage directories exist
 mkdir -p storage/downloads
