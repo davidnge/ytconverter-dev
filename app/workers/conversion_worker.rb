@@ -84,9 +84,14 @@ class ConversionWorker
         speed_options = "--no-playlist --no-check-certificate --geo-bypass -N 16 --no-part --no-mtime"
         
         # Combined command - simplified for debugging
-        download_cmd = "yt-dlp #{format_option} #{quality_option} #{output_option} #{speed_options} #{Shellwords.escape(conversion.url)} 2>&1"
+        # prev download_cmd = "yt-dlp #{format_option} #{quality_option} #{output_option} #{speed_options} #{Shellwords.escape(conversion.url)} 2>&1"
         
-        Rails.logger.info("Executing modified command: #{download_cmd}")
+        # yt-dlp path now in bin/tools
+        ytdlp_path = Rails.root.join('bin', 'tools', 'yt-dlp').to_s
+        download_cmd = "#{ytdlp_path} #{format_option} #{quality_option} #{output_option} #{speed_options} #{Shellwords.escape(conversion.url)} 2>&1"
+
+        Rails.logger.info("Executing command with path: #{ytdlp_path}")
+        Rails.logger.info("Full command: #{download_cmd}")  
         
         # Execute with increased timeout
         require 'timeout'

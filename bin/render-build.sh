@@ -2,25 +2,26 @@
 # Exit on error
 set -o errexit
 
+# Print commands as they execute
+set -x
+
+echo "Starting build process - adding debug info"
+echo "Current directory: $(pwd)"
+
 # Install system dependencies
 apt-get update -qq 
-apt-get install -y ffmpeg python3-pip
+apt-get install -y ffmpeg python3-pip curl
 
-# Install yt-dlp via apt
-# Try to add PPA if available (this might fail on some systems, but we continue anyway)
-add-apt-repository -y ppa:tomtomtom/yt-dlp || echo "Could not add PPA, continuing with default repos"
-apt-get update -qq
-apt-get install -y yt-dlp || echo "yt-dlp not found in repositories, trying alternate method"
+# Create a bin directory in the project
+mkdir -p bin/tools
 
-# Fallback method: If apt installation fails, try direct download of the binary
-if ! command -v yt-dlp &> /dev/null; then
-    echo "Installing yt-dlp binary directly"
-    curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-    chmod a+rx /usr/local/bin/yt-dlp
-fi
+# Download yt-dlp directly to the project's bin/tools directory
+echo "Downloading yt-dlp binary to project directory"
+curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o bin/tools/yt-dlp
+chmod a+rx bin/tools/yt-dlp
 
-# Verify yt-dlp is installed and working
-yt-dlp --version || echo "Warning: yt-dlp installation may have issues"
+echo "Testing yt-dlp functionality"
+./bin/tools/yt-dlp --version || echo "yt-dlp execution failed"
 
 # Build commands
 bundle install
