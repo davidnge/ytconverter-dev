@@ -59,13 +59,23 @@ class Conversion < ApplicationRecord
     return nil unless s3_url.present?
     
     begin
-      # Extract bucket and key from s3_url
-      uri = URI.parse(s3_url)
-      path_components = uri.path.split('/')
+      # Parse the S3 URL to extract the bucket and key
+      s3_url_pattern = /https:\/\/([\w-]+)\.s3\.([\w-]+)\.amazonaws\.com\/(.*)/
+      match = s3_url.match(s3_url_pattern)
       
-      s3_key = path_components[1..-1].join('/')
+      if match.nil?
+        Rails.logger.error("Failed to parse S3 URL: #{s3_url}")
+        return nil
+      end
       
-      # Create a presigned URL
+      bucket_name = match[1]
+      region = match[2]
+      s3_key = match[3]
+      
+      # Log for debugging
+      Rails.logger.info("Generating presigned URL for bucket: #{bucket_name}, key: #{s3_key}")
+      
+      # Create S3 client
       s3_client = Aws::S3::Client.new(
         region: ENV['AWS_REGION'],
         credentials: Aws::Credentials.new(
@@ -74,16 +84,21 @@ class Conversion < ApplicationRecord
         )
       )
       
-      presigned_url = s3_client.get_object(
-        bucket: ENV['AWS_BUCKET'],
+      # Generate presigned URL with explicit parameters
+      signer = Aws::S3::Presigner.new(client: s3_client)
+      presigned_url = signer.presigned_url(:get_object, 
+        bucket: bucket_name,
         key: s3_key,
+        expires_in: expires_in,
         response_content_disposition: "attachment; filename=\"#{filename}\"",
-        expires_in: expires_in
-      ).presigned_url
+        response_content_type: "audio/mpeg"
+      )
       
+      Rails.logger.info("Successfully generated presigned URL")
       return presigned_url
     rescue StandardError => e
-      Rails.logger.error("Presigned URL error: #{e.message}")
+      Rails.logger.error("Presigned URL generation error: #{e.message}")
+      Rails.logger.error(e.backtrace.join("\n"))
       return nil
     end
   end

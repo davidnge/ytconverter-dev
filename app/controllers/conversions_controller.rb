@@ -75,18 +75,23 @@ class ConversionsController < ApplicationController
         presigned_url = @conversion.presigned_download_url
         
         if presigned_url
+          # Log the successful URL generation (don't log the full URL for security)
+          Rails.logger.info("Generated presigned URL for conversion ##{@conversion.id}")
           redirect_to presigned_url, allow_other_host: true
         else
-          redirect_to conversion_path(@conversion), alert: 'Error generating download link. Please try again.'
+          Rails.logger.error("Failed to generate presigned URL for conversion ##{@conversion.id}, S3 URL: #{@conversion.s3_url}")
+          redirect_to conversion_path(@conversion), alert: 'Error generating download link. Please contact support.'
         end
       elsif @conversion.file_path.present? && File.exist?(@conversion.file_path)
         # Fallback to local file download if S3 URL is not available
+        Rails.logger.info("Serving local file for conversion ##{@conversion.id}: #{@conversion.file_path}")
         send_file @conversion.file_path, type: 'audio/mpeg', filename: @conversion.filename
       else
+        Rails.logger.warn("File not found for conversion ##{@conversion.id}. S3 URL: #{@conversion.s3_url}, File path: #{@conversion.file_path}")
         redirect_to conversion_path(@conversion), alert: 'File is not ready for download yet.'
       end
     else
-      redirect_to conversion_path(@conversion), alert: 'File is not ready for download yet.'
+      redirect_to conversion_path(@conversion), alert: 'Conversion is not completed yet.'
     end
   end
   
