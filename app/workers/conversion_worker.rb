@@ -233,8 +233,8 @@ class ConversionWorker
         if !download_status || 
            download_output.include?("copyright claim") || 
            download_output.include?("Video unavailable") || 
-           download_output.include?("ERROR:") ||
-           download_output.include?("error")
+           (download_output.include?("ERROR:") && !download_output.include?("Deleting original file")) ||
+           (download_output.include?("error") && !download_output.include?("Download completed"))
           
           error_message = if download_output.include?("copyright claim")
             "This video cannot be converted due to copyright restrictions."
@@ -242,6 +242,8 @@ class ConversionWorker
             "This video is unavailable or has been removed."
           elsif download_output.include?("Private video")
             "This video is private and cannot be accessed."
+          elsif download_output.include?("Sign in to confirm you're not a bot")
+            "YouTube authentication failed. Please try again later or try a different video."
           else
             "Unable to convert this video. Please try a different one."
           end
@@ -250,6 +252,9 @@ class ConversionWorker
           Rails.logger.error("Detailed error for conversion #{conversion.id}: Download command exit code: #{$?.exitstatus}")
           return handle_error(conversion, error_message)
         end
+
+        Rails.logger.info("Download completed successfully with exit code: #{$?.exitstatus}")
+
         
         # Try to extract video title from download output
         youtube_title = nil
