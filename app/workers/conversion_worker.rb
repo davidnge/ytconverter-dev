@@ -315,7 +315,6 @@ class ConversionWorker
           end
         rescue => e
           Rails.logger.warn("Non-critical error reading metadata: #{e.message}")
-          # Continue anyway - this is just for metadata
         end
         
         # Update title info if available
@@ -329,11 +328,20 @@ class ConversionWorker
         
         conversion.update(updates)
         
+        # Add this: Upload to S3 after successful conversion
+        if conversion.upload_to_s3
+          Rails.logger.info("File uploaded to S3 successfully")
+        else
+          Rails.logger.error("Failed to upload file to S3")
+        end
+        
         Rails.logger.info("Conversion completed successfully: #{mp3_path}")
       else
         Rails.logger.error("MP3 file was not created at: #{mp3_path}")
         return handle_error(conversion, "MP3 file was not created successfully. Please try a different video.")
       end
+
+      
     rescue => e
       Rails.logger.error("Unhandled error in ConversionWorker: #{e.message}")
       Rails.logger.error(e.backtrace.join("\n")) if e.backtrace

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_04_11_122429) do
+ActiveRecord::Schema[8.0].define(version: 2025_04_16_133950) do
   create_table "conversions", force: :cascade do |t|
     t.string "url"
     t.string "title"
@@ -22,6 +22,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_04_11_122429) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "youtube_id"
+    t.string "s3_url"
     t.index ["youtube_id"], name: "index_conversions_on_youtube_id"
   end
 end

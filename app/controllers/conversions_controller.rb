@@ -69,8 +69,22 @@ class ConversionsController < ApplicationController
   def download
     @conversion = Conversion.find(params[:id])
     
-    if @conversion.status == 'completed' && File.exist?(@conversion.file_path)
-      send_file @conversion.file_path, type: 'audio/mpeg', filename: @conversion.filename
+    if @conversion.status == 'completed'
+      if @conversion.s3_url.present?
+        # Generate a presigned URL and redirect to it
+        presigned_url = @conversion.presigned_download_url
+        
+        if presigned_url
+          redirect_to presigned_url, allow_other_host: true
+        else
+          redirect_to conversion_path(@conversion), alert: 'Error generating download link. Please try again.'
+        end
+      elsif @conversion.file_path.present? && File.exist?(@conversion.file_path)
+        # Fallback to local file download if S3 URL is not available
+        send_file @conversion.file_path, type: 'audio/mpeg', filename: @conversion.filename
+      else
+        redirect_to conversion_path(@conversion), alert: 'File is not ready for download yet.'
+      end
     else
       redirect_to conversion_path(@conversion), alert: 'File is not ready for download yet.'
     end
