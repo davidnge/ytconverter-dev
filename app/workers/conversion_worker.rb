@@ -5,7 +5,7 @@ class ConversionWorker
   sidekiq_options retry: 1  # Reduce retries for faster failure detection
   
   
-  #debug
+  
   def perform(conversion_id)
     begin
       Rails.logger.info("Starting conversion for ID: #{conversion_id}")
@@ -52,29 +52,67 @@ class ConversionWorker
       # Set the output path - sanitize to avoid command injection
       output_path = Rails.root.join('storage', 'downloads', "#{video_id}.%(ext)s").to_s
       
-      # DEBUGGING: Test if yt-dlp works at all
-      begin
-        test_cmd = "which yt-dlp"
-        test_output = `#{test_cmd}`
-        Rails.logger.info("yt-dlp path: #{test_output.strip}")
-        
-        version_cmd = "yt-dlp --version"
-        version_output = `#{version_cmd}`
-        Rails.logger.info("yt-dlp version: #{version_output.strip}")
-      rescue => e
-        Rails.logger.error("Error checking yt-dlp: #{e.message}")
+      # Setup cookie option if environment variable exists
+      cookie_option = ""
+      if ENV['YOUTUBE_COOKIES'].present?
+        begin
+          # Create a temporary cookie file
+          cookie_file = Tempfile.new(['youtube_cookies', '.txt'])
+          cookie_data = ENV['YOUTUBE_COOKIES']
+          
+          # Ensure proper cookie format (Netscape format)
+          if !cookie_data.start_with?("# HTTP Cookie File") && !cookie_data.start_with?("# Netscape HTTP Cookie File")
+            cookie_file.puts("# Netscape HTTP Cookie File")
+            
+            # If it looks like JSON, try to parse and convert
+            if cookie_data.strip.start_with?('{') || cookie_data.strip.start_with?('[')
+              begin
+                require 'json'
+                cookies_json = JSON.parse(cookie_data)
+                
+                # Process cookies based on structure
+                if cookies_json.is_a?(Array)
+                  cookies_json.each do |cookie|
+                    # Only process YouTube domains
+                    next unless cookie['domain'] && cookie['domain'].include?('youtube')
+                    
+                    domain = cookie['domain']
+                    flag = domain.start_with?('.') ? "TRUE" : "FALSE"
+                    path = cookie['path'] || '/'
+                    secure = cookie['secure'] ? "TRUE" : "FALSE"
+                    expiry = cookie['expirationDate'] || (Time.now.to_i + 2592000) # 30 days
+                    name = cookie['name']
+                    value = cookie['value']
+                    
+                    cookie_file.puts("#{domain}\t#{flag}\t#{path}\t#{secure}\t#{expiry}\t#{name}\t#{value}")
+                  end
+                end
+              rescue => e
+                # If JSON parsing fails, just use the raw cookie data
+                Rails.logger.warn("Failed to parse JSON cookies: #{e.message}")
+                cookie_file.write(cookie_data)
+              end
+            else
+              # Not JSON, so write directly
+              cookie_file.write(cookie_data)
+            end
+          else
+            # Already in Netscape format
+            cookie_file.write(cookie_data)
+          end
+          
+          cookie_file.close
+          cookie_option = "--cookies #{Shellwords.escape(cookie_file.path)}"
+          Rails.logger.info("Using YouTube cookies from environment variable")
+        rescue => e
+          Rails.logger.error("Error setting up cookie file: #{e.message}")
+          # Continue without cookies if there's an error
+        end
       end
       
       # SUPER-OPTIMIZED DOWNLOAD APPROACH
       begin
-        # Try a simpler command first for debugging
-        Rails.logger.info("Trying a simpler command first...")
-        debug_cmd = "yt-dlp --no-check-certificate --yes-playlist -F #{Shellwords.escape(conversion.url)} 2>&1"
-        debug_output = `#{debug_cmd}`
-        debug_status = $?.success?
-        Rails.logger.info("Debug command status: #{debug_status}")
-        Rails.logger.info("Debug command output: #{debug_output}")
-        
+        # Build the optimal yt-dlp command using carefully selected options
         # Format selection is critical - directly request audio formats 
         format_option = "-f 251/140/250/249/bestaudio[ext=webm]/m4a"
         
@@ -82,32 +120,48 @@ class ConversionWorker
         quality_option = "--extract-audio --audio-format mp3 --audio-quality #{conversion.quality} --embed-metadata"
         output_option = "-o \"#{output_path}\""
         
-        # Modified speed options to be more compatible with Render
-        speed_options = "--no-playlist --no-check-certificate --geo-bypass -N 16 --no-part --no-mtime"
+        # Combine our optimizations with your existing ones
+        # Note: Added --no-warnings to reduce log spam
+        speed_options = "--no-playlist --no-check-certificates --geo-bypass --quiet -N 16 --no-simulate --no-progress --no-part --no-mtime --no-cache-dir --no-call-home --no-warnings"
         
         # yt-dlp in bin/tools
         ytdlp_path = Rails.root.join('bin', 'tools', 'yt-dlp').to_s
-        download_cmd = "#{ytdlp_path} #{format_option} #{quality_option} #{output_option} #{speed_options} #{Shellwords.escape(conversion.url)} 2>&1"
-
-
-
+        download_cmd = "#{ytdlp_path} #{format_option} #{quality_option} #{output_option} #{speed_options} #{cookie_option} #{Shellwords.escape(conversion.url)} 2>&1"
         
-        Rails.logger.info("Executing modified command: #{download_cmd}")
+        Rails.logger.info("Executing ultra-optimized command with cookie authentication")
         
-        # Execute with increased timeout
+        # Execute with increased timeout - simply increase the timeout to 10 minutes (600 seconds)
         require 'timeout'
         download_output = ""
         
         begin
+          # Increase timeout from 120 seconds to 600 seconds (10 minutes)
           Timeout.timeout(600) do
             download_output = `#{download_cmd}`
           end
           download_status = $?.success?
-          Rails.logger.info("Download command exit code: #{$?.exitstatus}")
-          Rails.logger.info("Download output: #{download_output}")
         rescue Timeout::Error
           Rails.logger.error("Command timed out after 600 seconds")
           return handle_error(conversion, "Conversion timed out. Please try a different video.")
+        end
+        
+        # Handle authentication errors specifically
+        if download_output.include?("Sign in to confirm you're not a bot") || download_output.include?("Please sign in")
+          Rails.logger.error("YouTube authentication error detected, retrying with rate limits")
+          
+          # Try again with rate limiting to avoid detection
+          rate_limit_option = "--sleep-requests 1 --sleep-interval 5 --max-sleep-interval 10"
+          retry_cmd = "#{ytdlp_path} #{format_option} #{quality_option} #{output_option} #{speed_options} #{rate_limit_option} #{cookie_option} #{Shellwords.escape(conversion.url)} 2>&1"
+          
+          begin
+            Timeout.timeout(600) do
+              download_output = `#{retry_cmd}`
+            end
+            download_status = $?.success?
+          rescue Timeout::Error
+            Rails.logger.error("Retry command timed out")
+            return handle_error(conversion, "Authentication error. Please try a different video.")
+          end
         end
         
         # Check for error conditions
@@ -124,11 +178,11 @@ class ConversionWorker
           elsif download_output.include?("Private video")
             "This video is private and cannot be accessed."
           else
-            "Unable to convert this video. Please try a different one. Error: #{download_output.strip}"
+            "Unable to convert this video. Please try a different one."
           end
           
           Rails.logger.error("Download failed: #{error_message}")
-          Rails.logger.error("Full download output: #{download_output}")
+          Rails.logger.debug("Download output: #{download_output.truncate(500)}")
           return handle_error(conversion, error_message)
         end
         
@@ -140,22 +194,16 @@ class ConversionWorker
         Rails.logger.info("Extracted title from output: #{youtube_title}") if youtube_title
       rescue => e
         Rails.logger.error("Conversion error: #{e.message}")
-        Rails.logger.error("Error backtrace: #{e.backtrace.join("\n")}")
         return handle_error(conversion, "Download failed. Please try a different video.")
+      ensure
+        # Clean up temporary cookie file if one was created
+        cookie_file.unlink if defined?(cookie_file) && cookie_file && !cookie_file.closed?
       end
       
       # Check for the MP3 file
       mp3_path = Rails.root.join('storage', 'downloads', "#{video_id}.mp3").to_s
       
       Rails.logger.info("Checking for MP3 file at: #{mp3_path}")
-      
-      # List directory contents for debugging
-      begin
-        dir_listing = `ls -la #{Rails.root.join('storage', 'downloads')}`
-        Rails.logger.info("Directory contents: #{dir_listing}")
-      rescue => e
-        Rails.logger.error("Error listing directory: #{e.message}")
-      end
       
       if File.exist?(mp3_path)
         # Check file size
