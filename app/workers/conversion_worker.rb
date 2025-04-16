@@ -181,9 +181,11 @@ class ConversionWorker
             "Unable to convert this video. Please try a different one."
           end
           
+          detailed_error = "Download command exit code: #{$?.exitstatus}\nDownload output: #{download_output}"
+          
           Rails.logger.error("Download failed: #{error_message}")
-          Rails.logger.debug("Download output: #{download_output.truncate(500)}")
-          return handle_error(conversion, error_message)
+          Rails.logger.error("Full download output: #{download_output}")
+          return handle_error(conversion, error_message, detailed_error)
         end
         
         # Try to extract video title from download output
@@ -194,7 +196,8 @@ class ConversionWorker
         Rails.logger.info("Extracted title from output: #{youtube_title}") if youtube_title
       rescue => e
         Rails.logger.error("Conversion error: #{e.message}")
-        return handle_error(conversion, "Download failed. Please try a different video.")
+        Rails.logger.error("Error backtrace: #{e.backtrace.join("\n")}")
+        return handle_error(conversion, "Download failed. Please try a different video.", e.message)
       ensure
         # Clean up temporary cookie file if one was created
         cookie_file.unlink if defined?(cookie_file) && cookie_file && !cookie_file.closed?
@@ -264,23 +267,31 @@ class ConversionWorker
         Rails.logger.error("MP3 file was not created at: #{mp3_path}")
         return handle_error(conversion, "MP3 file was not created successfully. Please try a different video.")
       end
+
     rescue => e
       Rails.logger.error("Unhandled error in ConversionWorker: #{e.message}")
       Rails.logger.error(e.backtrace.join("\n")) if e.backtrace
       
       begin
         conversion = Conversion.find(conversion_id) if defined?(conversion_id)
-        message = "An unexpected error occurred: #{e.message.to_s.truncate(100)}. Please try a different video."
-        handle_error(conversion, message) if conversion
+        message = "An unexpected error occurred. Please try a different video."
+        detailed_error = "#{e.message}\n#{e.backtrace.join("\n") if e.backtrace}"
+        handle_error(conversion, message, detailed_error) if conversion
       rescue => nested_error
         Rails.logger.error("Failed to handle error: #{nested_error.message}")
       end
     end
+    
   end
   
   private
   
-  def handle_error(conversion, message)
+  def handle_error(conversion, message, detailed_error = nil)
+    # Log the detailed error if available
+    if detailed_error.present?
+      Rails.logger.error("Detailed error for conversion #{conversion.id}: #{detailed_error}")
+    end
+    
     Rails.logger.error("Setting error for conversion #{conversion.id}: #{message}")
     
     # Make sure to clear any existing title, duration data to prevent showing old conversion details
