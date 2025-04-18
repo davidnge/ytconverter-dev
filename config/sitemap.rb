@@ -1,5 +1,6 @@
 # config/sitemap.rb
 SitemapGenerator::Sitemap.default_host = "https://www.ytconverter.net"
+SitemapGenerator::Sitemap.compress = false
 
 SitemapGenerator::Sitemap.create do
   # Add root path
