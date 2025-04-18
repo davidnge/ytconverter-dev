@@ -7,8 +7,8 @@ SitemapGenerator::Sitemap.create do
   add '/', :changefreq => 'daily', :priority => 1.0
   
   # Add static pages
-  add '/contact', :changefreq => 'monthly'
-  add '/copyright-claims', :changefreq => 'monthly'
-  add '/privacy-policy', :changefreq => 'monthly'
-  add '/terms-of-use', :changefreq => 'monthly'
+  add '/contact', :changefreq => 'monthly', :priority => 0.7
+  add '/copyright-claims', :changefreq => 'monthly', :priority => 0.7
+  add '/privacy-policy', :changefreq => 'monthly', :priority => 0.7
+  add '/terms-of-use', :changefreq => 'monthly', :priority => 0.7
 end

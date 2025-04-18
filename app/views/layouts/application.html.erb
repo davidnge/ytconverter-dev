@@ -3,6 +3,7 @@
   <head>
     <title>YouTube to MP3 Converter | YT Converter</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="icon" href="/favicon.ico" sizes="any">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
@@ -35,6 +36,7 @@
       ]
     }
     </script>
+
 
      <%= yield(:additional_schema) if content_for?(:additional_schema) %>
 
