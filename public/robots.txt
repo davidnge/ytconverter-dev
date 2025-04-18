@@ -6,3 +6,5 @@ User-agent: *
 Allow: /
 Disallow: /conversions
 Disallow: /sidekiq
+
+Sitemap: https://www.ytconverter.net/sitemap.xml.gz
