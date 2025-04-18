@@ -1,11 +1,19 @@
 require 'sidekiq/web'
 
 Rails.application.routes.draw do
+  
+  #homepage
+  root 'conversions#index'
+
+  # new route for YouTube to MP3
+  get 'youtube-to-mp3', to: 'conversions#index'
+
+
   get "static_pages/contact"
   get "static_pages/copyright_claims"
   get "static_pages/privacy_policy"
   get "static_pages/terms_of_use"
-  root 'conversions#index'
+  
 
   # Static pages
   get 'contact', to: 'static_pages#contact'

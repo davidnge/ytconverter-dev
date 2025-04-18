@@ -5,6 +5,9 @@ SitemapGenerator::Sitemap.compress = false
 SitemapGenerator::Sitemap.create do
   # Add root path
   add '/', :changefreq => 'daily', :priority => 1.0
+
+  # Add new YouTube to MP3 path
+  add '/youtube-to-mp3', :changefreq => 'daily', :priority => 0.9
   
   # Add static pages
   add '/contact', :changefreq => 'monthly', :priority => 0.7
