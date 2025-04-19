@@ -102,18 +102,10 @@
       <%= link_to "Download MP3", download_conversion_path(conversion), class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" %>
     </div>
     
-    <!-- Only show this for non-failed status -->
-    <div class="mt-4 text-center" id="convert-another-link">
+    <!-- Convert Another link with dedicated target -->
+    <div class="mt-4 text-center" data-conversion-status-target="convertAnotherLink">
       <%= link_to "Convert Another Video", root_path, class: "text-indigo-600 hover:text-indigo-800" %>
     </div>
   <% end %>
   
-  <% if !is_failed && conversion.status != 'completed' %>
-    <div id="manual-refresh" data-conversion-status-target="manualRefresh" class="mt-6 hidden">
-      <p class="text-sm text-gray-600 mb-2">Is your download taking longer than expected?</p>
-      <button onclick="window.location.reload()" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-        Check Conversion Status
-      </button>
-    </div>
-  <% end %>
 </div>

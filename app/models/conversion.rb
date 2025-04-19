@@ -121,10 +121,15 @@ class Conversion < ApplicationRecord
   def formatted_duration
     return nil unless duration
     
-    minutes = duration / 60
+    hours = duration / 3600
+    minutes = (duration % 3600) / 60
     seconds = duration % 60
     
-    format("%02d:%02d", minutes, seconds)
+    if hours > 0
+      format("%02d:%02d:%02d", hours, minutes, seconds)
+    else
+      format("%02d:%02d", minutes, seconds)
+    end
   end
   
   def filename

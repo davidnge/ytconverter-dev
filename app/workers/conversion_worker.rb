@@ -283,7 +283,7 @@ class ConversionWorker
         if file_size > 200.megabytes
           File.delete(mp3_path)
           Rails.logger.info("Deleted file due to exceeding size limit")
-          return handle_error(conversion, "The generated MP3 file exceeds the maximum size limit (200MB). Please try a shorter video or a lower quality setting.")
+          return handle_error(conversion, "The generated MP3 file exceeds the maximum size limit. Please try a shorter video or a lower quality setting.")
         end
         
         if file_size < 1000

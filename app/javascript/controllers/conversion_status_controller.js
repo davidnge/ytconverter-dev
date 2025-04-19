@@ -1,6 +1,5 @@
 // app/javascript/controllers/conversion_status_controller.js
 
-
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
@@ -13,7 +12,8 @@ export default class extends Controller {
     "errorMessage", 
     "errorText",
     "manualRefresh",
-    "processingTip"
+    "processingTip",
+    "convertAnotherLink"  // Added target for the Convert Another link
   ]
   
   static values = {
@@ -34,6 +34,7 @@ export default class extends Controller {
     console.log("Has error message target:", this.hasErrorMessageTarget);
     console.log("Has error text target:", this.hasErrorTextTarget);
     console.log("Has processing tip target:", this.hasProcessingTipTarget);
+    console.log("Has convert another link target:", this.hasConvertAnotherLinkTarget);
     
     // Check if we need to show an error message immediately
     if (this.hasErrorMessageTarget && !this.errorMessageTarget.classList.contains('hidden')) {
@@ -43,6 +44,7 @@ export default class extends Controller {
     if (this.hasIdValue) {
       this.startPolling();
       this.setupManualRefreshTimer();
+      // Start tip rotation as soon as we connect, regardless of status
       this.startTipRotation();
     }
   }
@@ -206,6 +208,11 @@ export default class extends Controller {
     
     // Stop tip rotation
     this.clearTipRotation();
+
+    // Ensure "Convert Another" link is visible
+    if (this.hasConvertAnotherLinkTarget) {
+      this.convertAnotherLinkTarget.classList.remove('hidden');
+    }
   }
   
   handleProcessingStatus() {
@@ -239,6 +246,11 @@ export default class extends Controller {
     
     // Ensure tip rotation is running
     this.startTipRotation();
+
+    // Make sure "Convert Another" link is visible
+    if (this.hasConvertAnotherLinkTarget) {
+      this.convertAnotherLinkTarget.classList.remove('hidden');
+    }
   }
   
   handlePendingStatus() {
@@ -254,23 +266,41 @@ export default class extends Controller {
         </svg>
       </div>
     `;
+
+    // Ensure "Convert Another" link is visible
+    if (this.hasConvertAnotherLinkTarget) {
+      this.convertAnotherLinkTarget.classList.remove('hidden');
+    }
   }
   
   handleFailedStatus(data) {
     console.log("FAILED status detected");
     
+    const errorMessage = data.error_message || "An unknown error occurred. Please try a different video.";
+
     // Show error message
     if (this.hasErrorMessageTarget) {
       this.errorMessageTarget.classList.remove('hidden');
       
-      if (this.hasErrorTextTarget && data.error_message) {
-        this.errorTextTarget.textContent = data.error_message;
+      if (this.hasErrorTextTarget) {
+        this.errorTextTarget.textContent = errorMessage;
       }
     }
     
-    // Hide the standard "Convert Another" link if error has its own button
-    const convertLink = document.getElementById('convert-another-link');
-    if (convertLink) convertLink.classList.add('hidden');
+    // Update the main status container to show the error status
+    this.statusContainerTarget.innerHTML = `
+      <div class="flex items-start text-red-700 font-medium">
+        <svg class="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Conversion Failed: ${errorMessage}</span>
+      </div>
+    `;
+    
+    // Ensure the Convert Another link is always visible on error
+    if (this.hasConvertAnotherLinkTarget) {
+      this.convertAnotherLinkTarget.classList.remove('hidden');
+    }
   }
   
   startTipRotation() {
@@ -335,4 +365,3 @@ export default class extends Controller {
     return string.charAt(0).toUpperCase() + string.slice(1);
   }
 }
-
