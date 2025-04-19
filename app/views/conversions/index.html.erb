@@ -62,6 +62,9 @@
   </script>
 <% end %>
 
+<!-- test controller -->
+<!-- <div data-controller="test"></div> -->
+
 <div class="max-w-2xl mx-auto">
   <div id="conversion-form-container">
     <%= render 'conversion_form' %>
@@ -153,7 +156,6 @@
         <h3 class="font-medium text-gray-800">Support Long Videos</h3>
         <p class="text-gray-600 mt-2">Convert videos up to 2 hours in length.</p>
       </div>
-
     </div>
   </div>
   
@@ -190,23 +192,15 @@
         <p class="text-gray-600 mt-1 mb-6">Yes. Our converter fully supports YouTube Shorts. Just paste the Shorts URL (example: https://youtube.com/shorts/ABCDEFGHIJK) into the input field and click "Convert".</p>
       </div>
 
-
       <div>
         <h3 class="font-semibold text-gray-800">Are there video length limitations?</h3>
         <p class="text-gray-600 mt-1 mb-6">Yes. We support videos up to 2 hours in length. For videos longer than 1 hour, we automatically adjust the quality to 192 kbps to maintain reasonable file sizes and audio quality</p>
       </div>
-
     </div>
   </div>
-
-
 </div>
 
 <script>
-  // Keep track of the active conversion ID and any polling intervals
-  let activeConversionId = null;
-  let pollingInterval = null;
-  
   document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('conversion-form');
     
@@ -219,7 +213,7 @@
       window.history.replaceState({}, document.title, window.location.pathname);
       
       // Load the conversion status if ID is in URL
-      fetchAndShowConversionStatus(conversionId);
+      fetchConversionStatus(conversionId);
     }
     
     if (form) {
@@ -260,11 +254,8 @@
             submitButton.value = 'Convert';
             submitButton.disabled = false;
           } else {
-            // Save the active conversion ID
-            activeConversionId = data.id;
-            
             // Fetch and show the conversion status
-            fetchAndShowConversionStatus(data.id);
+            fetchConversionStatus(data.id);
             
             // Failsafe: If status doesn't load properly in 5 seconds, redirect to show page
             setTimeout(function() {
@@ -291,16 +282,13 @@
       if (link) {
         event.preventDefault();
         
-        // Stop any active polling
-        clearPolling();
-        
         // Reset to initial state
         resetToInitialState();
       }
     });
   });
   
-  function fetchAndShowConversionStatus(conversionId) {
+  function fetchConversionStatus(conversionId) {
     console.log(`Fetching status for conversion ${conversionId}`);
     
     fetch(`/conversions/${conversionId}/status`, {
@@ -318,48 +306,6 @@
         const statusContainer = document.getElementById('conversion-status-container');
         statusContainer.innerHTML = html;
         statusContainer.classList.remove('hidden');
-        
-        // Important: Check immediately for error messages and make them visible
-        const errorMsg = statusContainer.querySelector('[data-conversion-status-target="errorMessage"]');
-        if (errorMsg) {
-          console.log('Error message container found, making it visible');
-          errorMsg.classList.remove('hidden');
-          
-          // Also ensure the standard "Convert Another" link is hidden if we have an error
-          const convertLink = statusContainer.querySelector('#convert-another-link');
-          if (convertLink) convertLink.classList.add('hidden');
-          
-          // No need to start polling or animation for error states
-          return;
-        }
-        
-        // Get initial status
-        const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
-        const initialStatus = statusText ? statusText.textContent.toLowerCase() : 'pending';
-        
-        console.log('Initial status detected:', initialStatus);
-        
-        // Special handling for failed status
-        if (initialStatus === 'failed') {
-          console.log('Failed status detected on initial load');
-          
-          // Force a reload of the status partial to ensure error is shown
-          reloadStatusPartial(conversionId);
-          
-          // No need to start polling or animation
-          return;
-        }
-        
-        // Start polling for status updates if not failed or completed
-        if (initialStatus !== 'failed' && initialStatus !== 'completed') {
-          startPolling(conversionId);
-        }
-        
-        // Add backup mechanism for very long conversions
-        const maxWaitTime = 600000; // 10 minutes
-        setTimeout(() => {
-          checkFinalStatus(conversionId);
-        }, maxWaitTime);
       })
       .catch(error => {
         console.error('Status fetch error:', error);
@@ -368,225 +314,6 @@
         alert(`Error loading conversion status: ${error.message}. Redirecting to conversion page...`);
         window.location.href = `/conversions/${conversionId}`;
       });
-  }
-  
-  // Helper function to reload just the status partial
-  function reloadStatusPartial(conversionId) {
-    console.log(`Reloading status partial for conversion ${conversionId}`);
-    fetch(`/conversions/${conversionId}/status?_=${new Date().getTime()}`, {
-      headers: { 'Cache-Control': 'no-cache' }
-    })
-      .then(response => response.text())
-      .then(html => {
-        const statusContainer = document.getElementById('conversion-status-container');
-        statusContainer.innerHTML = html;
-        
-        // Ensure error message is visible if present
-        const errorMsg = statusContainer.querySelector('[data-conversion-status-target="errorMessage"]');
-        if (errorMsg) {
-          console.log("Found error message container after reload, ensuring visibility");
-          errorMsg.classList.remove('hidden');
-        }
-      })
-      .catch(error => console.error("Error reloading status:", error));
-  }
-  
-  function startPolling(conversionId) {
-    // Clear any existing polling
-    clearPolling();
-    
-    // Start with more frequent checks initially (every 1 second for the first 15 seconds)
-    // This helps catch copyright issues faster
-    let checkCount = 0;
-    const initialInterval = 1000; // 1 second
-    const regularInterval = 3000; // 3 seconds
-    let currentInterval = initialInterval;
-    
-    // Set up new polling
-    pollingInterval = setInterval(() => {
-      checkConversionStatus(conversionId);
-      
-      // After 15 checks (15 seconds), switch to slower polling
-      checkCount++;
-      if (checkCount === 15) {
-        clearInterval(pollingInterval);
-        pollingInterval = setInterval(() => {
-          checkConversionStatus(conversionId);
-        }, regularInterval);
-      }
-    }, initialInterval);
-    
-    // Add safety timeout to stop polling after 10 minutes
-    setTimeout(() => {
-      clearPolling();
-      console.log("Safety timeout reached, stopping polling");
-      
-      // Add a final check
-      checkConversionStatus(conversionId);
-    }, 600000); // 10 minutes
-  }
-  
-  function checkConversionStatus(conversionId) {
-    console.log(`Checking status for conversion: ${conversionId}`);
-    
-    // Add cache-busting and no-cache headers
-    fetch(`/conversions/${conversionId}.json?nocache=${new Date().getTime()}`, {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    })
-      .then(response => response.json())
-      .then(data => {
-        console.log("Status received:", data.status, "Error:", data.error_message);
-        
-        // Normalize status to lowercase for consistent comparison
-        // Use toString() to handle potential null values
-        const status = (data.status || "").toString().toLowerCase();
-        
-        // Check for failed status immediately (case insensitive)
-        if (status === 'failed') {
-          console.log("Conversion failed, updating UI immediately...");
-          
-          // For failed status, completely reload the status partial
-          // This is more reliable than trying to update individual elements
-          clearPolling();
-          
-          // Reload the entire partial instead of manipulating DOM elements
-          reloadStatusPartial(conversionId);
-          return;
-        }
-        
-        // For non-failed statuses, update normally
-        updateStatusUI(data);
-        
-        // If completed, stop polling
-        if (status === 'completed') {
-          clearPolling();
-        }
-      })
-      .catch(error => {
-        console.error("Error checking status:", error);
-        // Continue polling despite errors
-      });
-  }
-  
-  function updateStatusUI(data) {
-    // Normalize status for consistent handling
-    const status = (data.status || "").toString().toLowerCase();
-
-    // Update the status text - important to maintain case consistency
-    const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
-    if (statusText) {
-      statusText.textContent = capitalizeFirstLetter(status);
-    }
-    
-    // Update progress container class for processing state
-    const progressContainer = document.querySelector('.progress-container');
-    if (progressContainer) {
-      if (status === 'processing') {
-        progressContainer.classList.add('processing');
-      } else {
-        progressContainer.classList.remove('processing');
-      }
-    }
-    
-    // For completed status, immediately show 100% before showing download button
-    if (status === 'completed') {
-      // Update the status container with completed HTML
-      const statusContainer = document.querySelector('[data-conversion-status-target="statusContainer"]');
-      if (statusContainer) {
-        statusContainer.innerHTML = `
-          <div class="flex items-center text-green-700 font-medium">
-            <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-            </svg>
-            <span>Conversion completed! Your MP3 file is ready for download.</span>
-          </div>
-        `;
-      }
-      
-      // Show download button
-      const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
-      if (downloadBtn) {
-        downloadBtn.classList.remove('hidden');
-      }
-      
-      // Show details
-      const detailsPanel = document.querySelector('[data-conversion-status-target="details"]');
-      if (detailsPanel) {
-        detailsPanel.classList.remove('hidden');
-        
-        // Update title and duration
-        const titleElement = document.querySelector('[data-conversion-status-target="title"]');
-        if (titleElement && data.title) {
-          titleElement.textContent = data.title;
-        }
-        
-        const durationElement = document.querySelector('[data-conversion-status-target="duration"]');
-        if (durationElement && data.duration) {
-          durationElement.textContent = data.duration;
-        }
-      }
-    }
-  }
-  
-  function checkFinalStatus(conversionId) {
-    console.log("Performing final status check after max wait time");
-    
-    fetch(`/conversions/${conversionId}.json?_=${new Date().getTime()}`, {
-      headers: {
-        'Cache-Control': 'no-cache'
-      }
-    })
-    .then(response => response.json())
-    .then(data => {
-      // Normalize status to handle potential null values
-      const status = (data.status || "").toString().toLowerCase();
-      
-      console.log("Final status check result:", status, data.error_message);
-      
-      // If status is failed, force a reload of the partial
-      if (status === 'failed') {
-        console.log("Final check detected failed status, reloading partial");
-        clearPolling();
-        reloadStatusPartial(conversionId);
-      }
-      // For completed status, update the UI
-      else if (status === 'completed') {
-        console.log("Backup check: Conversion is actually complete - updating UI");
-        
-        // Update UI to show completed
-        const statusText = document.querySelector('[data-conversion-status-target="statusText"]');
-        if (statusText) statusText.textContent = "Completed";
-        
-        // Update progress bar to 100% - force instant update
-        const progressBar = document.getElementById('progress-bar');
-        if (progressBar) {
-          progressBar.style.transition = 'width 0.5s ease-out';
-          progressBar.style.width = '100%';
-        }
-        
-        // Show download button
-        const downloadBtn = document.querySelector('[data-conversion-status-target="downloadButton"]');
-        if (downloadBtn) downloadBtn.classList.remove('hidden');
-      }
-    })
-    .catch(error => console.error("Error in final check:", error));
-  }
-  
-  function capitalizeFirstLetter(string) {
-    if (!string) return '';
-    return string.charAt(0).toUpperCase() + string.slice(1);
-  }
-  
-  function clearPolling() {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      pollingInterval = null;
-    }
   }
   
   function resetToInitialState() {
@@ -606,8 +333,5 @@
         submitButton.disabled = false;
       }
     }
-    
-    // Reset active conversion ID
-    activeConversionId = null;
   }
 </script>

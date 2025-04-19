@@ -34,6 +34,10 @@ class ConversionsController < ApplicationController
       # Force reload to ensure we have the latest data
       @conversion.reload
       
+      response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+      response.headers['Pragma'] = 'no-cache'
+      response.headers['Expires'] = '0'
+      
       render partial: 'conversion_status', locals: { conversion: @conversion }, layout: false
     rescue ActiveRecord::RecordNotFound => e
       Rails.logger.error("Status error: Conversion #{params[:id]} not found - #{e.message}")
@@ -50,7 +54,11 @@ class ConversionsController < ApplicationController
     @conversion.reload
     
     # Log status for debugging
-    Rails.logger.info("Conversion #{@conversion.id} status: #{@conversion.status}, error: #{@conversion.error_message}")
+    Rails.logger.info("Conversion #{@conversion.id} JSON response: " +
+                     "status=#{@conversion.status}, " +
+                     "title=#{@conversion.title}, " +
+                     "error=#{@conversion.error_message}, " +
+                     "s3_url=#{@conversion.s3_url}")
     
     respond_to do |format|
       format.html
@@ -60,6 +68,7 @@ class ConversionsController < ApplicationController
         title: @conversion.title,
         duration: @conversion.formatted_duration,
         error_message: @conversion.error_message,
+        s3_url: @conversion.s3_url, # Add this to see if s3_url is properly set
         # Add a timestamp to force cache invalidation
         timestamp: Time.now.to_i
       }}

@@ -1,3 +1,4 @@
+<%# app/views/conversions/_conversion_status.html.erb %>
 <div class="bg-white shadow-md rounded-lg p-6 mb-8 status-container" data-controller="conversion-status" data-conversion-status-id-value="<%= conversion.id %>">
   <h2 class="text-xl font-semibold text-gray-800 mb-4">Converting Your Video</h2>
   
@@ -52,7 +53,7 @@
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               </p>
-              <p class="text-indigo-500 italic mt-2" id="processing-tip">Long videos may take a moment...</p>
+              <p class="text-indigo-500 italic mt-2" data-conversion-status-target="processingTip">Long videos may take a moment...</p>
             </div>
           </div>
         <% elsif conversion.status.to_s.downcase == 'completed' %>
@@ -108,7 +109,7 @@
   <% end %>
   
   <% if !is_failed && conversion.status != 'completed' %>
-    <div id="manual-refresh" class="mt-6 hidden">
+    <div id="manual-refresh" data-conversion-status-target="manualRefresh" class="mt-6 hidden">
       <p class="text-sm text-gray-600 mb-2">Is your download taking longer than expected?</p>
       <button onclick="window.location.reload()" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
         Check Conversion Status
@@ -116,53 +117,3 @@
     </div>
   <% end %>
 </div>
-
-<script>
-  document.addEventListener('DOMContentLoaded', function() {
-    // Process tip rotation for processing tip
-    const processingTip = document.getElementById('processing-tip');
-    
-    if (processingTip) {
-      // Define some processing tips
-      const tips = [
-        "Optimizing audio quality...",
-        "Applying audio filters...",
-        "Encoding with selected bitrate...",
-        "Preparing your download...",
-        "Almost there...",
-        "Finalizing your MP3 file...",
-        "Long videos may take a moment...",
-        "We're working on your conversion...",
-        "Thank you for your patience..."
-      ];
-      
-      let currentTipIndex = 0;
-      
-      // Update tip every 8 seconds
-      const tipInterval = setInterval(function() {
-        if (processingTip) {
-          // Move to next tip
-          currentTipIndex = (currentTipIndex + 1) % tips.length;
-          processingTip.textContent = tips[currentTipIndex];
-        } else {
-          // If the tip element is gone, clear the interval
-          clearInterval(tipInterval);
-        }
-      }, 8000);
-    }
-    
-    // Show the manual refresh button after 60 seconds if conversion is still in progress
-    const conversionStatus = '<%= conversion.status.to_s.downcase %>';
-    
-    if (conversionStatus !== 'failed' && conversionStatus !== 'completed') {
-      setTimeout(function() {
-        const statusContainer = document.querySelector('[data-conversion-status-target="statusContainer"]');
-        const manualRefresh = document.getElementById('manual-refresh');
-        
-        if (statusContainer && statusContainer.textContent.includes('Processing') && manualRefresh) {
-          manualRefresh.classList.remove('hidden');
-        }
-      }, 60000); // 1 minute
-    }
-  });
-</script>
