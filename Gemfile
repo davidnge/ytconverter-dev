@@ -2,7 +2,7 @@ source "https://rubygems.org"
 
 gem 'yt', '~> 0.32.0'             # YouTube API wrapper
 gem 'streamio-ffmpeg', '~> 3.0'   # For audio conversion
-gem 'sidekiq', '~> 7.0'           # For background processing
+gem 'sidekiq', '~> 8.0'           # For background processing
 gem 'yt-dlp.rb', '~> 0.3.1'
 gem 'dotenv-rails'                # For environment variables
 
